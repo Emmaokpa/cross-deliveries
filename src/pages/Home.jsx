@@ -27,7 +27,7 @@ export default function Home() {
               </div>
               <span className="experience-years">Years</span>
               <span className="experience-label">Experience</span>
-              <span className="kicker-pill">Why Choose Us</span>
+              <span className="why-tag">*Why Choose Us*</span>
             </div>
           </div>
           <div className="why-copy">
