@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { navMenu, siteInfo } from '../data/site.js'
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openSub, setOpenSub] = useState(null)
+  const { pathname } = useLocation()
+  const isHome = pathname === '/'
 
   return (
     <header className="site-header">
-      <div className="container header-inner">
+      <div className={`container header-inner${isHome ? ' stacked' : ''}`}>
         <Link to="/" className="logo-link" onClick={() => setMobileOpen(false)}>
           <img src="/images/Logo-edited.png" alt={siteInfo.name} width="132" height="74" />
         </Link>

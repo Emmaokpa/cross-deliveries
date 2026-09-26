@@ -28,7 +28,7 @@ export default function TrackForm() {
             required
           />
           <button type="submit" className="btn btn-primary">
-            Track Result
+            TRACK RESULT
           </button>
         </div>
         <p className="track-hint">Ex: 12345</p>

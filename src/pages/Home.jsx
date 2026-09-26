@@ -24,13 +24,13 @@ export default function Home() {
             <div className="experience-badge">
               <div className="experience-top">
                 <span className="experience-number">15 +</span>
-                <span className="experience-years">Years</span>
               </div>
+              <span className="experience-years">Years</span>
               <span className="experience-label">Experience</span>
+              <span className="kicker-pill">Why Choose Us</span>
             </div>
           </div>
           <div className="why-copy">
-            <span className="kicker-pill">Why Choose Us</span>
             <h2>Safe, Reliable And Express Logistics Transport Solutions That Saves Your Time!</h2>
             <p>
               We pride ourselves on providing the best transport and shipping services available allover the
@@ -45,7 +45,7 @@ export default function Home() {
       <section className="section services-section">
         <div className="container">
           <div className="section-head">
-            <span className="kicker-pill">We Specialise in the Transportation</span>
+            <span className="kicker-pill">WE SPECIALISE IN THE TRANSPORTATION</span>
             <h2>Specialist Logistics Services</h2>
           </div>
           <div className="services-grid">
