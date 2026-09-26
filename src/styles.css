@@ -124,8 +124,9 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  min-height: 80px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .logo-link img {
@@ -230,10 +231,27 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
     display: none;
   }
   .nav-toggle {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    font-size: 26px;
+    line-height: 1;
   }
   .mobile-nav {
     display: block;
+  }
+  /* Fixed-height bar: logo far left, hamburger far right, 16px edge padding */
+  .header-inner {
+    min-height: 72px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .logo-link img {
+    height: 44px;
+    width: auto;
   }
 }
 
