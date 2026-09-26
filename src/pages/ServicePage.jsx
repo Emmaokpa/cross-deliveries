@@ -1,5 +1,30 @@
 import PageHero from '../components/PageHero.jsx'
+import TrackForm from '../components/TrackForm.jsx'
 import { pages } from '../data/site.js'
+
+function Starburst({ className }) {
+  return (
+    <svg
+      className={`starburst ${className || ''}`}
+      viewBox="0 0 40 40"
+      width="34"
+      height="34"
+      aria-hidden="true"
+    >
+      <g fill="none" strokeWidth="2.4" strokeLinecap="round">
+        <path d="M20 2 L20 12" stroke="#e30613" />
+        <path d="M20 28 L20 38" stroke="#031435" />
+        <path d="M2 20 L12 20" stroke="#031435" />
+        <path d="M28 20 L38 20" stroke="#e30613" />
+        <path d="M7.3 7.3 L14.4 14.4" stroke="#e30613" />
+        <path d="M25.6 25.6 L32.7 32.7" stroke="#031435" />
+        <path d="M7.3 32.7 L14.4 25.6" stroke="#031435" />
+        <path d="M25.6 14.4 L32.7 7.3" stroke="#e30613" />
+      </g>
+      <circle cx="20" cy="20" r="4" fill="#e30613" />
+    </svg>
+  )
+}
 
 function FaqAccordion({ items }) {
   return (
@@ -114,6 +139,13 @@ export default function ServicePage({ pageKey }) {
       {/* AIR layout */}
       {pageKey === 'air' && (
         <>
+          {/* WP Cargo tracking band under the banner */}
+          <section className="track-band air-track-band" style={{ backgroundImage: 'url(/images/track.webp)' }}>
+            <div className="track-band-overlay" />
+            <div className="container track-band-inner">
+              <TrackForm />
+            </div>
+          </section>
           <section className="section-sm">
             <div className="container about-grid">
               <div className="about-media">
@@ -129,17 +161,21 @@ export default function ServicePage({ pageKey }) {
           </section>
           <section className="section-sm services-white">
             <div className="container">
-              <div className="section-head">
+              <div className="section-head section-head-flanked">
+                <Starburst />
                 <h2>{page.sectionTitle}</h2>
+                <Starburst />
               </div>
-              <div className="values-grid">
+              <div className="values-grid air-cards">
                 {page.cards.map((c) => (
                   <div key={c.title} className="value-card">
-                    <i className="fa-solid fa-plane" aria-hidden="true" />
+                    <Starburst />
                     <h3>
                       <strong>{c.title}</strong>
                     </h3>
-                    <p>{c.text}</p>
+                    {(c.paragraphs || [c.text]).map((p) => (
+                      <p key={p.slice(0, 24)}>{p}</p>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -150,26 +186,37 @@ export default function ServicePage({ pageKey }) {
 
       {/* OCEAN layout */}
       {pageKey === 'ocean' && (
-        <section className="section-sm">
-          <div className="container about-grid">
-            <div className="about-media">
-              <img src={page.intro.image} alt={page.intro.heading} style={{ borderRadius: 19 }} />
+        <>
+          <section className="section-sm">
+            <div className="container about-grid">
+              <div className="about-media">
+                <img src={page.intro.image} alt={page.intro.heading} style={{ borderRadius: 19 }} />
+              </div>
+              <div className="about-copy">
+                <span className="kicker">{page.kicker}</span>
+                <h2>{page.intro.heading}</h2>
+                {page.intro.paragraphs.map((p) => (
+                  <p key={p.slice(0, 24)}>{p}</p>
+                ))}
+              </div>
             </div>
-            <div className="about-copy">
-              <span className="kicker">{page.kicker}</span>
-              <h2>{page.intro.heading}</h2>
-              {page.intro.paragraphs.map((p) => (
-                <p key={p.slice(0, 24)}>{p}</p>
-              ))}
-              {page.intro.points.map((point) => (
-                <p key={point.title}>
-                  <strong>{point.title}</strong>
-                  {point.text}
-                </p>
-              ))}
+          </section>
+          <section className="section-sm services-white">
+            <div className="container">
+              <div className="values-grid air-cards">
+                {page.intro.points.map((point) => (
+                  <div key={point.title} className="value-card">
+                    <Starburst />
+                    <h3>
+                      <strong>{point.title}</strong>
+                    </h3>
+                    <p>{point.text}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </>
       )}
 
       {/* ROAD layout */}
@@ -184,10 +231,12 @@ export default function ServicePage({ pageKey }) {
           </section>
           <section className="section-sm services-white">
             <div className="container">
-              <div className="section-head">
+              <div className="section-head section-head-flanked">
+                <Starburst />
                 <h2>
                   <strong>{page.overlandTitle}</strong>
                 </h2>
+                <Starburst />
               </div>
               {page.overlandParagraphs.map((p) => (
                 <p key={p.slice(0, 24)} className="overland-p">
@@ -197,11 +246,14 @@ export default function ServicePage({ pageKey }) {
               <p className="subheading">
                 <strong>{page.listTitle}</strong>
               </p>
-              <ul className="check-list">
+              <div className="road-cards">
                 {page.list.map((item) => (
-                  <li key={item}>{item}</li>
+                  <div key={item} className="value-card road-card">
+                    <Starburst />
+                    <h3>{item}</h3>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           </section>
         </>

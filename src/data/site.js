@@ -217,7 +217,10 @@ export const pages = {
       },
       {
         title: 'Domestic Air Freight',
-        text: 'We are dedicated to delivering goods on time to meet customer’s needs by our well-trained professionals; they ensure to deliver these products effectively and efficiently. We make sure that the cargo is delivered very safely via air freight. All the procedures are well executed right from the storage to the customer’s destination.',
+        paragraphs: [
+          'We are dedicated to delivering goods on time to meet customer’s needs by our well-trained professionals; they ensure to deliver these products effectively and efficiently.',
+          'We make sure that the cargo is delivered very safely via air freight. All the procedures are well executed right from the storage to the customer’s destination.',
+        ],
       },
     ],
   },
@@ -235,16 +238,16 @@ export const pages = {
       ],
       points: [
         {
-          title: 'Expertise:',
-          text: ' We have logistics experts specialising in major industry sectors, so we can help you improve your performance and drive out costs.',
+          title: 'Expertise',
+          text: 'We have logistics experts specialising in major industry sectors, so we can help you improve your performance and drive out costs.',
         },
         {
-          title: 'Global Reach:',
-          text: ' We’re on the ground in over 190 countries, allowing you to export and import from more locations worldwide. Providing more ocean loops and services than anyone else.',
+          title: 'Global Reach',
+          text: 'We’re on the ground in over 190 countries, allowing you to export and import from more locations worldwide. Providing more ocean loops and services than anyone else.',
         },
         {
-          title: 'Quality Control:',
-          text: ' SML Courier Ocean Freight shipments include a wide range of quality controlled equipment types. We strive for on time deliverability and provide end-to-end visibility.',
+          title: 'Quality Control',
+          text: 'SML Courier Ocean Freight shipments include a wide range of quality controlled equipment types. We strive for on time deliverability and provide end-to-end visibility.',
         },
       ],
     },

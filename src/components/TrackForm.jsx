@@ -17,13 +17,15 @@ export default function TrackForm() {
   return (
     <div className="track-form-wrap">
       <form onSubmit={handleSubmit} className="track-form">
-        <h4>Enter the Consignment No.</h4>
+        <h4>
+          Enter the Consignment No. <span className="required-star">*</span>
+        </h4>
         <div className="track-form-row">
           <input
             type="text"
             value={number}
             onChange={(e) => setNumber(e.target.value)}
-            placeholder="Enter Tracking Number"
+            placeholder="Enter Tracking Number..."
             autoComplete="off"
             required
           />
