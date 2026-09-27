@@ -23,6 +23,9 @@
 
 html {
   scroll-behavior: smooth;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -31,9 +34,17 @@ body {
   background: var(--background);
   line-height: 1.75;
   font-size: clamp(1.0625rem, 1.063rem + ((1vw - 0.48rem) * 0.119), 1.125rem);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
-img {
+img,
+svg,
+video,
+iframe,
+embed,
+object {
   max-width: 100%;
   height: auto;
   display: block;
@@ -42,6 +53,7 @@ img {
 a {
   color: inherit;
   text-decoration: none;
+  overflow-wrap: break-word;
 }
 
 ul {
@@ -50,6 +62,7 @@ ul {
 
 p {
   margin: 0 0 1.25rem;
+  overflow-wrap: break-word;
 }
 
 p:last-child {
@@ -61,18 +74,34 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   color: var(--foreground);
   line-height: 1.3;
+  overflow-wrap: break-word;
 }
 
-h1 { font-size: clamp(36px, 3vw, 45px); }
-h2 { font-size: clamp(28px, 2.6vw, 32px); }
-h3 { font-size: clamp(20px, 1.9vw, 22px); }
-h4 { font-size: clamp(18px, 1.5vw, 20px); }
+h1 { font-size: clamp(1.75rem, 1.1rem + 3.2vw, 2.8125rem); }
+h2 { font-size: clamp(1.5rem, 1.2rem + 1.5vw, 2rem); }
+h3 { font-size: clamp(1.1875rem, 1.1rem + 0.45vw, 1.375rem); }
+h4 { font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); }
 
 .container {
   width: 100%;
   max-width: 1240px;
   margin: 0 auto;
-  padding: 0 30px;
+  padding: 0 clamp(16px, 4vw, 30px);
+}
+
+/* Break very long words (e.g. tracking numbers) on tiny screens */
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+.text-center,
+.section-head,
+.page-hero .container,
+.hero-slide-content {
+  overflow-wrap: break-word;
 }
 
 .btn {
@@ -110,9 +139,13 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
 }
 
 @media (max-width: 768px) {
-  .section { padding: 32px 0; }
+  .section { padding: 48px 0; }
+  .section-sm { padding: 40px 0; }
+}
+
+@media (max-width: 480px) {
+  .section { padding: 40px 0; }
   .section-sm { padding: 32px 0; }
-  .container { padding: 0 16px; }
 }
 
 /* ===== Header ===== */
@@ -252,6 +285,38 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   .logo-link img {
     height: 44px;
     width: auto;
+    max-width: calc(100vw - 96px);
+  }
+}
+
+/* Keep the mobile menu inside the viewport and let it animate open/closed */
+.mobile-nav {
+  max-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
+  transition: max-height 0.35s ease, padding 0.35s ease;
+}
+
+.mobile-nav.open {
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  padding-top: 10px;
+  padding-bottom: 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 993px) {
+  .mobile-nav {
+    display: none !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .mobile-nav a,
+  .mobile-sub-toggle {
+    font-size: 15px;
+    padding: 11px 2px;
   }
 }
 
@@ -343,6 +408,10 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   .hero-slider {
     height: clamp(360px, 68vw, 440px);
   }
+  .hero-slide-content h2 {
+    max-width: 100%;
+    padding: 0 8px;
+  }
   .feature-row {
     grid-template-columns: 1fr;
   }
@@ -365,7 +434,7 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   position: relative;
   background-size: cover;
   background-position: center;
-  padding: 100px 30px;
+  padding: 100px 0;
 }
 
 .track-band-overlay {
@@ -425,6 +494,12 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+}
+
+@media (max-width: 480px) {
+  .track-form-wrap {
+    padding: 18px 16px;
+  }
 }
 
 .track-hint {
@@ -565,6 +640,7 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   position: absolute;
   left: 0;
   bottom: 40px;
+  max-width: min(100%, 320px);
   background: var(--secondary);
   color: #fff;
   padding: 18px 26px;
@@ -869,6 +945,22 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   }
 }
 
+/* Values/service-type cards: 2-col step before stacking on small screens */
+@media (max-width: 900px) and (min-width: 641px) {
+  .values-grid,
+  .contact-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* On very small phones, let contact cards sit edge-to-edge in a single column */
+@media (max-width: 640px) {
+  .values-grid,
+  .contact-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== Contact ===== */
 .contact-cards-section {
   background: var(--light-bg);
@@ -885,8 +977,9 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   padding: 34px 28px;
   box-shadow: 2px 2px 30px 0 rgba(0, 0, 0, 0.102);
   display: flex;
-  gap: 16px;
+  flex-direction: column;
   align-items: flex-start;
+  gap: 10px;
 }
 
 .contact-icon i {
@@ -894,7 +987,14 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
 }
 
 .contact-card h3 {
-  margin: 0 0 8px;
+  margin: 0;
+}
+
+.contact-card h3,
+.contact-card p {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 900px) {
@@ -1200,41 +1300,30 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
 
 /* ===== Mobile parity refinements (under 768px) ===== */
 @media (max-width: 768px) {
-  /* Typography scaling */
+  /* Typography scaling (fluid — keeps scaling between 360-768px) */
   body {
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 0.9375rem;
+    line-height: 1.55;
   }
 
-  h1,
-  h2,
   .section-head h2,
   .about-copy h2 {
-    font-size: 25px;
-    line-height: 1.3;
-  }
-
-  h3 {
-    font-size: 19px;
-    line-height: 1.3;
-  }
-
-  h4 {
-    font-size: 18px;
+    font-size: clamp(1.375rem, 1.2rem + 0.9vw, 1.75rem);
     line-height: 1.3;
   }
 
   .hero-slide-content h2 {
-    font-size: 26px;
+    font-size: clamp(1.5rem, 1.2rem + 1.5vw, 2rem);
+    line-height: 1.3;
   }
 
   .hero-slide-content p {
-    font-size: 18px;
+    font-size: clamp(1.125rem, 1rem + 0.6vw, 1.375rem);
   }
 
   .service-card h3 {
-    font-size: 20px;
-    line-height: 1.3;
+    font-size: clamp(1.125rem, 1rem + 0.6vw, 1.25rem);
+    line-height: 1.35;
   }
 
   /* Section rhythm */
@@ -1308,5 +1397,60 @@ h4 { font-size: clamp(18px, 1.5vw, 20px); }
   .footer-col a:hover,
   .footer-col a:active {
     color: var(--primary);
+  }
+}
+
+/* ===== Small phones (< 480px) ===== */
+@media (max-width: 480px) {
+  .why-grid,
+  .about-grid {
+    gap: 28px;
+  }
+
+  .why-media > img {
+    height: 380px;
+  }
+
+  .experience-badge {
+    max-width: calc(100% - 32px);
+    padding: 14px 18px;
+    bottom: 20px;
+  }
+
+  .experience-years {
+    font-size: 20px;
+  }
+
+  .experience-label {
+    font-size: 1.25rem;
+  }
+
+  .section-head-flanked {
+    gap: 10px;
+  }
+
+  .service-card {
+    min-height: 300px;
+  }
+
+  .track-form-row input {
+    padding: 0.85rem 1rem;
+  }
+
+  .intl-banner {
+    padding: 48px 0;
+  }
+}
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .hero-slide,
+  .mobile-nav,
+  .submenu {
+    transition: none;
   }
 }

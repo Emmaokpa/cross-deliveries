@@ -382,7 +382,8 @@ table.data-table {
 .badge.Created { background: #e8edf7; color: var(--a-navy); }
 .badge.Shipped { background: #e0ecff; color: #1d4ed8; }
 .badge.in-transit { background: #ede9fe; color: #6d28d9; }
-.badge['Held at Customs'] { background: #fbf1de; color: var(--a-amber); }
+.badge.held-at-customs { background: #fbf1de; color: var(--a-amber); }
+
 .badge.out-for-delivery { background: #e5f4ea; color: var(--a-green); }
 .badge.Delivered { background: #0e7a3d; color: #fff; }
 .badge.on-hold { background: #fdecec; color: var(--a-red); }

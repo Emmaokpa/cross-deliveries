@@ -47,10 +47,14 @@ export default function Header() {
         </button>
       </div>
 
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <nav className="mobile-nav" aria-label="Mobile">
-          <ul>
+      {/* Mobile menu (always mounted so it can animate open/closed) */}
+      <nav
+        className={`mobile-nav${mobileOpen ? ' open' : ''}`}
+        aria-label="Mobile"
+        aria-hidden={!mobileOpen}
+        inert={mobileOpen ? undefined : true}
+      >
+        <ul>
             {navMenu.map((item) => (
               <li key={item.label}>
                 {item.children ? (
@@ -81,8 +85,7 @@ export default function Header() {
               </li>
             ))}
           </ul>
-        </nav>
-      )}
+      </nav>
     </header>
   )
 }
