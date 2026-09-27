@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
 export default function TrackForm() {
   const [searchParams] = useSearchParams()
   const [number, setNumber] = useState(searchParams.get('tracking') || '')
@@ -16,7 +18,7 @@ export default function TrackForm() {
     setError('')
     setSearched(true)
     try {
-      const res = await fetch(`/api/v1/track/${encodeURIComponent(target)}`)
+      const res = await fetch(`${API_ORIGIN}/api/v1/track/${encodeURIComponent(target)}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Tracking lookup failed')
       setResult(data)

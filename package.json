@@ -5,28 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node --env-file-if-exists=.env server/index.js",
-    "dev:all": "node --env-file-if-exists=.env scripts/dev-all.js",
     "build": "vite build",
-    "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.js"
+    "preview": "vite preview",
+    "api": "node --env-file-if-exists=../.env crossborders-api/src/index.js",
+    "dev:all": "node scripts/dev-all.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.3.1",
-    "bcryptjs": "^3.0.3",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.10.2",
-    "pdfkit": "^0.20.2",
-    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.1.18",
     "@vitejs/plugin-react": "^5.0.0",
     "nanoid": "^6.0.1",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.1.18",
     "vite": "^7.1.0"
   },
   "allowScripts": {

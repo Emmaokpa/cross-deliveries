@@ -14,7 +14,7 @@ function run(name, args, color) {
   procs.push(p)
 }
 
-run('api', ['--env-file-if-exists=.env', 'server/index.js'], '36')
+run('api', ['--env-file-if-exists=.env', 'crossborders-api/src/index.js'], '36')
 run('web', ['node_modules/vite/bin/vite.js', '--host', '0.0.0.0'], '35')
 
 for (const sig of ['SIGINT', 'SIGTERM']) {

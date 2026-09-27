@@ -1,4 +1,8 @@
-const BASE = '/api'
+// Base URL of the API.
+// - Local dev: empty (Vite proxy forwards /api to localhost:8787)
+// - Production: set VITE_API_URL=https://your-api-domain.com in Vercel env vars
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const BASE = `${API_ORIGIN}/api`
 
 export function getToken() {
   return localStorage.getItem('cbd_token')

@@ -3,7 +3,11 @@ dist
 .freebuff
 .DS_Store
 *.local
-
-# Backend
-/data/
 .env
+.env.local
+
+# Standalone API (deployed separately to a VPS; has its own gitignore)
+crossborders-api/node_modules/
+crossborders-api/.env
+crossborders-api/.env.local
+crossborders-api/*.log
