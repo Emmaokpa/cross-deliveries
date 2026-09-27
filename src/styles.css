@@ -38,8 +38,8 @@
     font-family: var(--font-body);
     color: var(--color-muted);
     background: #fff;
-    line-height: 1.75;
-    font-size: clamp(1.0625rem, 1.063rem + ((1vw - 0.48rem) * 0.119), 1.125rem);
+    line-height: 1.7;
+    font-size: clamp(0.9375rem, 0.9rem + 0.2vw, 1.0625rem);
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
