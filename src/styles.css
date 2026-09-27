@@ -1189,13 +1189,6 @@ button {
   text-indent: 0;
 }
 
-.footer-bottom {
-  background: #1d1b1b;
-  padding: 16px 0;
-  text-align: center;
-  font-size: 1rem;
-}
-
 @media (max-width: 900px) {
   .footer-grid {
     grid-template-columns: 1fr 1fr;

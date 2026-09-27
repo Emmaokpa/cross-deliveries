@@ -42,11 +42,6 @@ export default function Footer() {
           </ul>
         </div>
       </div>
-      <div className="footer-bottom">
-        <p>
-          © {new Date().getFullYear()} {siteInfo.name} – {siteInfo.tagline}
-        </p>
-      </div>
     </footer>
   )
 }
