@@ -96,18 +96,32 @@ export async function connectDB() {
   await seedSuperAdmin()
 }
 
+// TEMP MOCK BOOTSTRAP — remove when testing is done.
+// Every real admin logs in once with these mock creds, creates their own
+// super_admin account from Admin → Staff Accounts, and uses that from then
+// on. The mock account is re-ensured on every boot so it always works.
+// Cleanup when done: delete this function + its call in connectDB(), then
+// remove the admin@gmail.com document from the admins collection.
 async function seedSuperAdmin() {
   const email = 'admin@gmail.com'
-  const existing = await Admin.findOne({ email }).lean()
-  if (existing) return
-  await Admin.create({
-    email,
-    name: 'Super Admin',
-    password_hash: bcrypt.hashSync('password123', 10),
-    role: 'super_admin',
-    must_reset_password: true,
-  })
-  console.log('[db] Seeded super admin:', email)
+  const existing = await Admin.findOne({ email })
+  if (!existing) {
+    await Admin.create({
+      email,
+      name: 'Super Admin',
+      password_hash: bcrypt.hashSync('password123', 10),
+      role: 'super_admin',
+      must_reset_password: false,
+    })
+    console.log('[db] Seeded MOCK super admin: admin@gmail.com / password123')
+    return
+  }
+  existing.password_hash = bcrypt.hashSync('password123', 10)
+  existing.role = 'super_admin'
+  existing.active = true
+  existing.must_reset_password = false
+  await existing.save()
+  console.log('[db] Mock super admin ensured: admin@gmail.com / password123')
 }
 
 export { Types }
