@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
-import { TRACKING_URL } from './shipment-utils.js'
+import fs from 'node:fs'
+import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 
 const BRAND_RED = '#E30613'
 const NAVY = '#031435'
@@ -53,6 +54,18 @@ function drawLetterhead(doc, shipment) {
   doc.rect(0, 0, doc.page.width, 92).fill(NAVY)
   doc.rect(0, 92, doc.page.width, 4).fill(BRAND_RED)
 
+  // Brand logo (white card behind it since the PNG has transparent background)
+  if (fs.existsSync(LOGO_PATH)) {
+    doc.save()
+    doc.roundedRect(doc.page.width - 168, 16, 96, 60, 8).fill('#FFFFFF')
+    try {
+      doc.image(LOGO_PATH, doc.page.width - 160, 22, { fit: [80, 48], align: 'center', valign: 'center' })
+    } catch {
+      /* logo optional */
+    }
+    doc.restore()
+  }
+
   // Logo mark (starburst-inspired)
   const cx = 62
   const cy = 46
@@ -71,8 +84,8 @@ function drawLetterhead(doc, shipment) {
   // QR code top-right linking to public tracking
   try {
     const qr = QRCode.toBuffer(TRACKING_URL(shipment.tracking_number), { width: 220, margin: 0, color: { dark: NAVY, light: '#FFFFFF' } })
-    doc.image(qr, doc.page.width - 128, 18, { width: 56, height: 56 })
-    doc.fontSize(6.5).fillColor('#B9C2D8').text('SCAN TO TRACK', doc.page.width - 128, 78, { width: 56, align: 'center' })
+    doc.image(qr, doc.page.width - 128, 92, { width: 48, height: 48 })
+    doc.fontSize(6.5).fillColor(GREY).text('SCAN TO TRACK', doc.page.width - 128, 142, { width: 48, align: 'center' })
   } catch {
     /* QR optional */
   }

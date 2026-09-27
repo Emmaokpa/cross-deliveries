@@ -1,9 +1,12 @@
+import nodemailer from 'nodemailer'
+import fs from 'node:fs'
 import { Shipment } from '../db.js'
 import { audit } from '../routes/auth.js'
-import { TRACKING_URL } from './shipment-utils.js'
+import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 import { buildInvoicePdf } from './pdf.js'
 
-const API_URL = 'https://api.brevo.com/v3/smtp/email'
+const LOGO_CID = 'cbd-logo'
+
 const BRAND_RED = '#E30613'
 const NAVY = '#031435'
 
@@ -36,14 +39,16 @@ function renderTemplate(shipment) {
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:8px;overflow:hidden;box-shadow:0 10px 30px rgba(3,20,53,0.08);">
           <!-- Letterhead -->
           <tr>
-            <td style="background:${NAVY};padding:26px 32px;">
+            <td style="background:${NAVY};padding:22px 28px;">
               <table role="presentation" width="100%"><tr>
                 <td>
                   <div style="color:#FFFFFF;font-size:20px;font-weight:bold;letter-spacing:0.3px;">CrossBorders<span style="color:#FF5A6E;">Deliveries</span></div>
                   <div style="color:#B9C2D8;font-size:11px;margin-top:4px;letter-spacing:1px;">GLOBAL LOGISTICS &amp; COURIER SERVICES — AIR • OCEAN • ROAD</div>
                 </td>
-                <td align="right" style="width:70px;">
-                  <div style="width:54px;height:54px;border-radius:50%;background:#FFFFFF;color:${NAVY};font-weight:bold;font-size:11px;line-height:54px;text-align:center;">CBD</div>
+                <td align="right" style="width:112px;">
+                  <div style="background:#FFFFFF;border-radius:8px;padding:7px;display:inline-block;">
+                    <img src="cid:${LOGO_CID}" alt="CrossBordersDeliveries" width="88" style="display:block;width:88px;height:auto;border:0;" />
+                  </div>
                 </td>
               </tr></table>
             </td>
@@ -148,57 +153,57 @@ function escapeHtml(s = '') {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
-async function brevoSend({ apiKey, toEmail, toName, subject, html, attachment }) {
-  const body = {
-    sender: { name: 'CrossBordersDeliveries', email: process.env.MAIL_FROM || 'no-reply@crossbordersdeliveries.com' },
-    to: [{ email: toEmail, name: toName }],
-    subject,
-    htmlContent: html,
-  }
-  if (attachment) body.attachment = [attachment]
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify(body),
+// SMTP transport (Brevo SMTP, Gmail, Mailgun, Mailtrap… any provider).
+// Returns null when SMTP is not configured → emails are simulated in logs.
+function smtpTransport() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null
+  const port = Number(SMTP_PORT) || 587
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port,
+    secure: port === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Brevo API ${res.status}: ${text.slice(0, 300)}`)
-  }
-  return res.json()
 }
 
-// Compiles the PDF, renders the template, and dispatches via Brevo.
-// Falls back to a logged simulation when BREVO_API_KEY is absent.
+// Compiles the PDF, renders the template, and sends via SMTP (with the brand
+// logo inline and the invoice attached). Falls back to a logged simulation
+// when SMTP env vars are absent.
 export async function sendShipmentEmail(shipment, admin) {
-  const apiKey = process.env.BREVO_API_KEY
   const to = shipment.recipient_email
   const subject = `[${shipment.tracking_number}] Shipment ${shipment.current_status} — CrossBordersDeliveries`
   const html = fillTemplate(shipment)
+  const transport = smtpTransport()
 
-  if (!apiKey) {
+  if (!transport) {
     console.log(`[email:simulated] → ${to} | ${subject}`)
-    await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `Brevo key not configured; simulated email to ${to}`)
-    return { sent: false, simulated: true, to, subject, message: 'BREVO_API_KEY not set — email simulated in logs.' }
+    await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `SMTP not configured; simulated email to ${to}`)
+    return { sent: false, simulated: true, to, subject, message: 'SMTP not configured — email simulated in logs.' }
   }
 
-  const pdfBuffer = Buffer.from(buildInvoicePdf(shipment).output())
-  brevoSend({
-    apiKey,
-    toEmail: to,
-    toName: shipment.recipient_name,
-    subject,
-    html,
-    attachment: { name: `${shipment.tracking_number}-invoice.pdf`, content: pdfBuffer.toString('base64') },
-  })
-    .then(async () => {
-      await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
-      await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via Brevo`)
-    })
-    .catch(async (err) => {
-      console.error('[brevo] send failed:', err.message)
-      await audit(admin, 'email.failed', 'shipment', String(shipment._id), String(err.message).slice(0, 300))
-    })
+  const invoicePdf = Buffer.from(buildInvoicePdf(shipment).output())
+  const attachments = [
+    { filename: `${shipment.tracking_number}-invoice.pdf`, content: invoicePdf, contentType: 'application/pdf' },
+  ]
+  if (fs.existsSync(LOGO_PATH)) {
+    attachments.push({ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID })
+  }
 
-  return { sent: true, queued: true, to, subject, message: 'Email queued for delivery via Brevo.' }
+  try {
+    await transport.sendMail({
+      from: `"CrossBordersDeliveries" <${process.env.MAIL_FROM || 'no-reply@crossbordersdeliveries.com'}>`,
+      to,
+      subject,
+      html,
+      attachments,
+    })
+    await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
+    await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via SMTP`)
+    return { sent: true, to, subject, message: 'Email sent via SMTP.' }
+  } catch (err) {
+    console.error('[smtp] send failed:', err.message)
+    await audit(admin, 'email.failed', 'shipment', String(shipment._id), String(err.message).slice(0, 300))
+    return { sent: false, error: err.message, to, subject, message: 'SMTP send failed — see server logs.' }
+  }
 }

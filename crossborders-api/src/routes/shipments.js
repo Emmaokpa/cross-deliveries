@@ -255,7 +255,7 @@ router.get('/shipments/:id/invoice.pdf', async (req, res) => {
   await audit(req.admin, 'invoice.generated', 'shipment', String(shipment._id), `PDF invoice for ${shipment.tracking_number}`)
 })
 
-// POST /api/v1/shipments/:id/send-email — manual send/resend via Brevo
+// POST /api/v1/shipments/:id/send-email — manual send/resend via SMTP
 router.post('/shipments/:id/send-email', async (req, res) => {
   const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })

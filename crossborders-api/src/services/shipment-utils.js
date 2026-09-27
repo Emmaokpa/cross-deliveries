@@ -1,4 +1,10 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Shipment } from '../db.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+// Self-contained brand logo, shipped with the API (assets/logo.png) — used inline in emails and on PDF invoices
+export const LOGO_PATH = path.resolve(__dirname, '../../assets/logo.png')
 
 export const STATUS_PROGRESS = {
   Created: 5,
