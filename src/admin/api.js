@@ -12,6 +12,14 @@ export function setToken(token) {
   token ? localStorage.setItem('cbd_token', token) : localStorage.removeItem('cbd_token')
 }
 
+// In the Cloud Shell web preview, the tunnel periodically re-authenticates by
+// redirecting requests to ssh.cloud.google.com — which fetch() cannot follow
+// (no CORS headers on the auth endpoint). Only a full page navigation can
+// complete that dance, so on a network failure we reload the page. The reload
+// is rate-limited so a genuinely down server doesn't cause reload loops.
+const RELOAD_KEY = 'cbd_net_retry_at'
+const RELOAD_COOLDOWN_MS = 10_000
+
 export async function api(path, { method = 'GET', body, isForm = false } = {}) {
   const headers = { accept: 'application/json' }
   const token = getToken()
@@ -26,18 +34,16 @@ export async function api(path, { method = 'GET', body, isForm = false } = {}) {
       body: body && !isForm ? JSON.stringify(body) : isForm ? body : undefined,
     })
   } catch {
-    // Network failure — often the Cloud Shell preview tunnel needing to
-    // re-authenticate, which only a full page navigation can do (fetch
-    // cannot follow its auth redirects). Reload once to re-auth, then
-    // surface a clear error if it still fails.
-    if (sessionStorage.getItem('cbd_net_retry') !== '1') {
-      sessionStorage.setItem('cbd_net_retry', '1')
+    const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0)
+    if (Date.now() - last >= RELOAD_COOLDOWN_MS) {
+      sessionStorage.setItem(RELOAD_KEY, String(Date.now()))
       window.location.reload()
       return new Promise(() => {}) // page is reloading — halt here
     }
-    throw new Error('Network error — could not reach the server. Check your connection and try again.')
+    throw new Error(
+      'Network error — could not reach the server. If you are on the dev preview, the tunnel may need to re-authenticate: reload the page and try again.',
+    )
   }
-  sessionStorage.removeItem('cbd_net_retry')
 
   if (res.status === 401) {
     setToken(null)

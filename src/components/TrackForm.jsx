@@ -24,7 +24,11 @@ export default function TrackForm() {
       setResult(data)
     } catch (err) {
       setResult(null)
-      setError(err.message)
+      setError(
+        err instanceof TypeError
+          ? 'Network error — could not reach the server. Please try again.'
+          : err.message,
+      )
     } finally {
       setLoading(false)
     }
