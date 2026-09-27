@@ -5,5 +5,5 @@ dist
 *.local
 
 # Backend
-data/
+/data/
 .env

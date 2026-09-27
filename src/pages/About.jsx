@@ -5,12 +5,19 @@ export default function About() {
   const { about } = pages
   return (
     <>
-      <PageHero title={about.title} image={about.heroImage} />
+      <PageHero title={about.title} image={about.heroImage} srcSet={about.heroSrcSet} />
 
       <section className="section-sm">
         <div className="container about-grid">
           <div className="about-media">
-            <img src={about.intro.image} alt="About Cross Borders Deliveries" />
+            <img
+              src={about.intro.image}
+              srcSet={about.intro.imageSrcSet}
+              sizes="(max-width: 900px) 100vw, 45vw"
+              alt="About Cross Borders Deliveries"
+              loading="lazy"
+              decoding="async"
+            />
           </div>
           <div className="about-copy">
             <span className="kicker">{about.intro.kicker}</span>

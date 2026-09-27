@@ -1,3 +1,11 @@
+// Build a responsive srcSet from WP-style size variants (NAME-WxH.ext)
+export function buildSrcSet(path, variants) {
+  const dot = path.lastIndexOf('.')
+  const stem = path.slice(0, dot)
+  const ext = path.slice(dot)
+  return variants.map((v) => `${stem}-${v}${ext} ${v.split('x')[0]}w`).join(', ')
+}
+
 export const siteInfo = {
   name: 'CrossBordersDeliveries.com',
   tagline: 'leading logistics and distribution services',
@@ -34,16 +42,19 @@ export const navMenu = [
 export const heroSlides = [
   {
     image: '/images/1-1.png',
+    srcSet: buildSrcSet('/images/1-1.png', ['300x169', '1024x576']),
     title: 'We Are Global Logistics Solution Provider',
     text: 'By air, sea or via large and modern cargo trucks.',
   },
   {
     image: '/images/3.png',
+    srcSet: buildSrcSet('/images/3.png', ['300x169', '1024x576']),
     title: 'Delivering Excellence',
     text: 'Our services are available 24/7',
   },
   {
     image: '/images/2.png',
+    srcSet: buildSrcSet('/images/2.png', ['300x169', '1024x576']),
     title: 'Cross Borders Deliveries.',
     text: 'specializes in delivering customized transportation solutions.',
   },
@@ -53,18 +64,21 @@ export const services = [
   {
     label: 'Air Freight',
     image: '/images/Untitled-design-6.png',
+    srcSet: buildSrcSet('/images/Untitled-design-6.png', ['300x169', '768x432', '1024x576', '1536x864']),
     text: 'As a leader in global air freight forwarding, CrossBordersDeliveries specializes in delivering customized transportation solutions.',
     path: '/air-freight-forwarding',
   },
   {
     label: 'Road Freight',
     image: '/images/truck.png',
+    srcSet: buildSrcSet('/images/truck.png', ['300x300', '768x768', '1024x1024']),
     text: 'At various stages of their journey, cargo travels along the world’s roads, where we provide a reliable and reassuring presence every step of the way.',
     path: '/road-freight-forwarding',
   },
   {
     label: 'Ocean Freight',
     image: '/images/ship.png',
+    srcSet: buildSrcSet('/images/ship.png', ['300x300', '768x768', '1024x1024']),
     text: 'Ocean freight is often the backbone of transportation and supply chain solutions. We deliver efficient and reliable ocean freight services to meet your needs.',
     path: '/ocean-freight-forwarding',
   },
@@ -102,8 +116,10 @@ export const pages = {
     slug: 'about-us',
     title: 'About Us',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     intro: {
       image: '/images/Kingcefo-Logo-9.png',
+      imageSrcSet: buildSrcSet('/images/Kingcefo-Logo-9.png', ['150x150', '300x300']),
       kicker: 'Cross Borders Deliveries',
       heading: 'Providing Full Rang of Courier And Logistics Services Worldwide',
       paragraphs: [
@@ -134,6 +150,7 @@ export const pages = {
     slug: 'consultation',
     title: 'Consultation',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     intro: {
       image: '/images/As-you-light-the-Diwali-lamps-may-your-life-be-brightened-with-good-health-wealth-and-happiness.-Happy-Diwali-13-1024x770.png',
       heading: 'Top Class Freight Consultation Services',
@@ -150,6 +167,7 @@ export const pages = {
     slug: 'international-freight',
     title: 'International Freight',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     sectionTitle: 'International Freight?',
     sectionText:
       'International freight shipping through Cross Borders Deliveries gives you options for sending shipments over 150 lbs. around the world. You can choose from air, land, and sea services that deliver the right balance of price and speed for your business.\nAir & Sea Freight services are available to any destination in the world. Cross Borders Deliveries is one of the few leading transport company in Turkey that can provide all the services in the Air or Sea Freight industry',
@@ -177,6 +195,7 @@ export const pages = {
     slug: 'domestic-freight',
     title: 'Domestic Freight',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     sectionTitle: 'Over-The-Road Services',
     sectionText:
       'Our wide range of domestic freight services will get your goods safely across the city, state, or country, and over the road, by rail, or by sea.',
@@ -201,8 +220,10 @@ export const pages = {
     slug: 'air-freight-forwarding',
     title: 'Air Freight Forwarding',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     intro: {
       image: '/images/Untitled-design-6.png',
+      imageSrcSet: buildSrcSet('/images/Untitled-design-6.png', ['300x169', '768x432', '1024x576', '1536x864']),
       heading: 'Air Freight Carrier',
       paragraphs: [
         'Domestic and International Air Freight service for any kind of goods enables the customer to ship anything in the process of relocating.',
@@ -228,9 +249,11 @@ export const pages = {
     slug: 'ocean-freight-forwarding',
     title: 'Ocean Freight Forwarding',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     kicker: 'OCEAN FREIGHT',
     intro: {
       image: '/images/As-you-light-the-Diwali-lamps-may-your-life-be-brightened-with-good-health-wealth-and-happiness.-Happy-Diwali-12-1024x1024.png',
+      imageSrcSet: buildSrcSet('/images/As-you-light-the-Diwali-lamps-may-your-life-be-brightened-with-good-health-wealth-and-happiness.-Happy-Diwali-12.png', ['150x150', '300x300', '768x768', '1024x1024']),
       heading: 'The World is Your Oyster',
       paragraphs: [
         'Cross Borders Deliveries offers a flexible range of global and local Ocean Freight services for both Less-Than-Container Load (LCL) and Full-Container Load (FCL) shipments.',
@@ -256,6 +279,7 @@ export const pages = {
     slug: 'road-freight-forwarding',
     title: 'Road Freight Forwarding',
     heroImage: '/images/freight.jpg',
+    heroSrcSet: buildSrcSet('/images/freight.jpg', ['300x169', '768x432']),
     kicker: 'CROSS BORDERS DELIVERIES',
     sectionTitle: 'Road Freight Forwarding Services',
     sectionText:

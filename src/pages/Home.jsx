@@ -9,7 +9,15 @@ export default function Home() {
       <HeroSlider />
 
       {/* Track shipment band */}
-      <section className="track-band" style={{ backgroundImage: 'url(/images/track.webp)' }}>
+      <section
+        className="track-band"
+        style={{
+          backgroundImage:
+            '-webkit-image-set(url(/images/track-300x149.webp) 1x, url(/images/track.webp) 2x)',
+          backgroundImage:
+            'image-set(url(/images/track-300x149.webp) 300w, url(/images/track-768x381.webp) 768w, url(/images/track.webp) 1200w)',
+        }}
+      >
         <div className="track-band-overlay" />
         <div className="container track-band-inner">
           <TrackForm />
@@ -20,7 +28,14 @@ export default function Home() {
       <section className="section">
         <div className="container why-grid">
           <div className="why-media">
-            <img src="/images/man.png" alt="Logistics specialist" />
+            <img
+              src="/images/man.png"
+              srcSet="/images/man-150x150.png 150w, /images/man-300x300.png 300w, /images/man-768x768.png 768w, /images/man.png 1024w"
+              sizes="(max-width: 900px) 100vw, 40vw"
+              alt="Logistics specialist"
+              loading="lazy"
+              decoding="async"
+            />
             <div className="experience-badge">
               <div className="experience-top">
                 <span className="experience-number">15 +</span>
@@ -51,7 +66,14 @@ export default function Home() {
           <div className="services-grid">
             {services.map((service) => (
               <Link to={service.path} key={service.label} className="service-card">
-                <img src={service.image} alt={service.label} />
+                <img
+                  src={service.image}
+                  srcSet={service.srcSet}
+                  sizes="(max-width: 900px) 100vw, (max-width: 1200px) 33vw, 400px"
+                  alt={service.label}
+                  loading="lazy"
+                  decoding="async"
+                />
                 <div className="service-card-body">
                   <span className="service-tag">{service.label}</span>
                   <h3>{service.text}</h3>

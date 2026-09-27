@@ -15,7 +15,15 @@ export default function HeroSlider() {
     <section className="hero-slider">
       {heroSlides.map((slide, i) => (
         <div key={slide.image} className={`hero-slide${i === current ? ' active' : ''}`}>
-          <img src={slide.image} alt="" className="hero-slide-bg" />
+          <img
+            src={slide.image}
+            srcSet={slide.srcSet}
+            sizes="100vw"
+            alt={slide.title}
+            className="hero-slide-bg"
+            loading={i === 0 ? 'eager' : 'lazy'}
+            decoding="async"
+          />
           <div className="hero-slide-overlay" />
           <div className="hero-slide-content container">
             <h2>{slide.title}</h2>

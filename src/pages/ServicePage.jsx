@@ -51,14 +51,14 @@ export default function ServicePage({ pageKey }) {
 
   return (
     <>
-      <PageHero title={page.title} image={page.heroImage} />
+      <PageHero title={page.title} image={page.heroImage} srcSet={page.heroSrcSet} />
 
       {/* CONSULTATION layout */}
       {pageKey === 'consultation' && (
         <section className="section-sm">
           <div className="container about-grid">
             <div className="about-media">
-              <img src={page.intro.image} alt={page.intro.heading} />
+              <img src={page.intro.image} srcSet={page.intro.imageSrcSet} sizes="(max-width: 900px) 100vw, 45vw" alt={page.intro.heading} loading="lazy" decoding="async" />
             </div>
             <div className="about-copy">
               <h2>{page.intro.heading}</h2>
@@ -149,7 +149,7 @@ export default function ServicePage({ pageKey }) {
           <section className="section-sm">
             <div className="container about-grid">
               <div className="about-media">
-                <img src={page.intro.image} alt={page.intro.heading} style={{ borderRadius: 19 }} />
+                <img src={page.intro.image} srcSet={page.intro.imageSrcSet} sizes="(max-width: 900px) 100vw, 45vw" alt={page.intro.heading} loading="lazy" decoding="async" style={{ borderRadius: 19 }} />
               </div>
               <div className="about-copy">
                 <h2>{page.intro.heading}</h2>
@@ -190,7 +190,7 @@ export default function ServicePage({ pageKey }) {
           <section className="section-sm">
             <div className="container about-grid">
               <div className="about-media">
-                <img src={page.intro.image} alt={page.intro.heading} style={{ borderRadius: 19 }} />
+                <img src={page.intro.image} srcSet={page.intro.imageSrcSet} sizes="(max-width: 900px) 100vw, 45vw" alt={page.intro.heading} loading="lazy" decoding="async" style={{ borderRadius: 19 }} />
               </div>
               <div className="about-copy">
                 <span className="kicker">{page.kicker}</span>

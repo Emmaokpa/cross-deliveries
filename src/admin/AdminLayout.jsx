@@ -58,10 +58,13 @@ export default function AdminLayout() {
           </div>
         </aside>
 
+        {open && <div className="sidebar-backdrop" onClick={() => setOpen(false)} />}
         <div className="admin-main">
           <header className="admin-topbar">
-            <button className="btn-ghost-a btn-sm-a" style={{ display: 'none' }} id="menu-btn" onClick={() => setOpen((o) => !o)}>☰</button>
-            <h2>Operations Console</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <button className="btn-ghost-a btn-sm-a admin-menu-btn" aria-label="Toggle menu" onClick={() => setOpen((o) => !o)}>☰</button>
+              <h2>Operations Console</h2>
+            </div>
             <button className="btn-ghost-a btn-sm-a" onClick={logout}>Sign out</button>
           </header>
           <main className="admin-content">
