@@ -18,11 +18,26 @@ export async function api(path, { method = 'GET', body, isForm = false } = {}) {
   if (token) headers.authorization = `Bearer ${token}`
   if (body && !isForm) headers['content-type'] = 'application/json'
 
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body && !isForm ? JSON.stringify(body) : isForm ? body : undefined,
-  })
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body && !isForm ? JSON.stringify(body) : isForm ? body : undefined,
+    })
+  } catch {
+    // Network failure — often the Cloud Shell preview tunnel needing to
+    // re-authenticate, which only a full page navigation can do (fetch
+    // cannot follow its auth redirects). Reload once to re-auth, then
+    // surface a clear error if it still fails.
+    if (sessionStorage.getItem('cbd_net_retry') !== '1') {
+      sessionStorage.setItem('cbd_net_retry', '1')
+      window.location.reload()
+      return new Promise(() => {}) // page is reloading — halt here
+    }
+    throw new Error('Network error — could not reach the server. Check your connection and try again.')
+  }
+  sessionStorage.removeItem('cbd_net_retry')
 
   if (res.status === 401) {
     setToken(null)
