@@ -24,14 +24,36 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '')
   .map((s) => s.trim())
   .filter(Boolean)
 
+// Local dev convenience: always allow loopback origins regardless of port
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+// Private/LAN hosts (e.g. Vite's "Network" URL) — allowed outside production
+const IS_PROD = process.env.NODE_ENV === 'production'
+const PRIVATE_IPV4 = /^(10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/
+
+function isAllowedOrigin(origin) {
+  let hostname
+  try {
+    hostname = new URL(origin).hostname
+  } catch {
+    return false
+  }
+  if (LOCAL_HOSTS.has(hostname)) return true
+  if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return true
+  if (/\.vercel\.app$/.test(hostname)) return true
+  // Google Cloud Shell / Codespaces-style web previews (dev only)
+  if (!IS_PROD && hostname.endsWith('.cloudshell.dev')) return true
+  if (!IS_PROD && (PRIVATE_IPV4.test(hostname) || hostname.endsWith('.local'))) return true
+  return false
+}
+
 app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true) // curl / same-origin / server-to-server
-      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(new URL(origin).hostname)) {
-        return callback(null, true)
-      }
-      callback(new Error('Not allowed by CORS'))
+      if (isAllowedOrigin(origin)) return callback(null, true)
+      console.warn(`[server] CORS: rejected origin ${origin}`)
+      callback(new Error(`Not allowed by CORS: ${origin}`))
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
@@ -52,7 +74,7 @@ app.use((req, res) => res.status(404).json({ error: 'Not found' }))
 app.use((err, req, res, next) => {
   console.error('[server]', err)
   if (res.headersSent) return next(err)
-  if (err.message === 'Not allowed by CORS') return res.status(403).json({ error: 'Origin not allowed' })
+  if (err.message.startsWith('Not allowed by CORS')) return res.status(403).json({ error: 'Origin not allowed' })
   res.status(500).json({ error: 'Internal server error' })
 })
 
