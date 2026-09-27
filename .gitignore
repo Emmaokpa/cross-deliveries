@@ -3,3 +3,7 @@ dist
 .freebuff
 .DS_Store
 *.local
+
+# Backend
+data/
+.env

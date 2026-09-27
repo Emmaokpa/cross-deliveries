@@ -1,6 +1,7 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import Layout from './components/Layout.jsx'
+import AdminRoot from './admin/index.jsx'
 import Home from './pages/Home.jsx'
 import About from './pages/About.jsx'
 import Contact from './pages/Contact.jsx'
@@ -36,6 +37,7 @@ export default function App() {
         ))}
         <Route path="*" element={<NotFound />} />
       </Route>
+      <Route path="/admin/*" element={<AdminRoot />} />
     </Routes>
   )
 }
