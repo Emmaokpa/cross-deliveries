@@ -107,16 +107,16 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Partner logos */}
+      {/* Partner logos — one centered column on mobile, rows on larger screens */}
       <section className="bg-line py-10 sm:py-14">
-        <div className="container-x grid grid-cols-2 items-center justify-items-center gap-6 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="container-x grid grid-cols-1 items-center justify-items-center gap-8 sm:grid-cols-3 sm:gap-6 lg:grid-cols-6">
           {partnerLogos.map((logo) => (
             <img
               key={logo}
               src={logo}
               alt="Partner"
               loading="lazy"
-              className="h-14 w-auto max-w-[120px] object-contain opacity-55 grayscale lg:h-[62px]"
+              className="h-12 w-auto max-w-[180px] object-contain opacity-55 grayscale sm:h-14 lg:h-[62px]"
             />
           ))}
         </div>
