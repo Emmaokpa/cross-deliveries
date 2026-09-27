@@ -1,97 +1,113 @@
-import { DatabaseSync } from 'node:sqlite'
+import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
-import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
-import path from 'node:path'
 
-const DB_PATH = process.env.DB_PATH || 'data/logistics.db'
-mkdirSync(path.dirname(DB_PATH), { recursive: true })
+const { Schema, model, Types } = mongoose
 
-const db = new DatabaseSync(DB_PATH)
+// ---------- Admin ----------
+const adminSchema = new Schema(
+  {
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    name: { type: String, required: true },
+    password_hash: { type: String, required: true },
+    role: { type: String, enum: ['super_admin', 'admin'], default: 'admin' },
+    active: { type: Boolean, default: true },
+    must_reset_password: { type: Boolean, default: false },
+  },
+  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
+)
 
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
+// ---------- Checkpoint (embedded) ----------
+const checkpointSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    timestamp: { type: Date, required: true },
+    location: { type: String, required: true },
+    status_tag: { type: String, required: true },
+    admin_notes: { type: String, default: '' },
+    created_at: { type: Date, default: Date.now },
+  },
+  { _id: false },
+)
 
-  CREATE TABLE IF NOT EXISTS admins (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin','admin')),
-    active INTEGER NOT NULL DEFAULT 1,
-    must_reset_password INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
+// ---------- Shipment ----------
+const shipmentSchema = new Schema(
+  {
+    tracking_number: { type: String, required: true, unique: true },
+    sender_name: { type: String, required: true },
+    sender_email: { type: String, required: true },
+    sender_phone: { type: String, default: '' },
+    sender_address: { type: String, default: '' },
+    recipient_name: { type: String, required: true },
+    recipient_email: { type: String, required: true },
+    recipient_phone: { type: String, default: '' },
+    recipient_address: { type: String, default: '' },
+    recipient_city: { type: String, default: '' },
+    recipient_country: { type: String, default: '' },
+    origin_city: { type: String, default: '' },
+    destination_city: { type: String, default: '' },
+    cargo_type: { type: String, enum: ['Air', 'Ocean', 'Road'], default: 'Air' },
+    package_weight: { type: Number, default: 0 },
+    package_dimensions: { type: String, default: '' },
+    package_quantity: { type: Number, default: 1 },
+    package_description: { type: String, default: '' },
+    base_freight: { type: Number, default: 0 },
+    surcharge_fuel: { type: Number, default: 0 },
+    surcharge_customs: { type: Number, default: 0 },
+    total_cost: { type: Number, default: 0 },
+    payment_status: { type: String, enum: ['Paid', 'Unpaid', 'Pending'], default: 'Unpaid' },
+    current_status: {
+      type: String,
+      enum: ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold'],
+      default: 'Created',
+    },
+    progress_percentage: { type: Number, min: 0, max: 100, default: 0 },
+    email_sent_at: { type: Date, default: null },
+    checkpoints: { type: [checkpointSchema], default: [] },
+  },
+  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
+)
 
-  CREATE TABLE IF NOT EXISTS shipments (
-    id TEXT PRIMARY KEY,
-    tracking_number TEXT UNIQUE NOT NULL,
-    sender_name TEXT NOT NULL,
-    sender_email TEXT NOT NULL,
-    sender_phone TEXT DEFAULT '',
-    sender_address TEXT DEFAULT '',
-    recipient_name TEXT NOT NULL,
-    recipient_email TEXT NOT NULL,
-    recipient_phone TEXT DEFAULT '',
-    recipient_address TEXT DEFAULT '',
-    recipient_city TEXT DEFAULT '',
-    recipient_country TEXT DEFAULT '',
-    origin_city TEXT DEFAULT '',
-    destination_city TEXT DEFAULT '',
-    cargo_type TEXT NOT NULL DEFAULT 'Air' CHECK (cargo_type IN ('Air','Ocean','Road')),
-    package_weight REAL DEFAULT 0,
-    package_dimensions TEXT DEFAULT '',
-    package_quantity INTEGER DEFAULT 1,
-    package_description TEXT DEFAULT '',
-    base_freight REAL NOT NULL DEFAULT 0,
-    surcharge_fuel REAL NOT NULL DEFAULT 0,
-    surcharge_customs REAL NOT NULL DEFAULT 0,
-    total_cost REAL NOT NULL DEFAULT 0,
-    payment_status TEXT NOT NULL DEFAULT 'Unpaid' CHECK (payment_status IN ('Paid','Unpaid','Pending')),
-    current_status TEXT NOT NULL DEFAULT 'Created' CHECK (current_status IN ('Created','Shipped','In Transit','Held at Customs','Out for Delivery','Delivered','On Hold')),
-    progress_percentage INTEGER NOT NULL DEFAULT 0 CHECK (progress_percentage BETWEEN 0 AND 100),
-    email_sent_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
+// ---------- Audit log ----------
+const auditLogSchema = new Schema(
+  {
+    admin_id: { type: String, default: null },
+    admin_email: { type: String, default: 'system' },
+    action: { type: String, required: true },
+    entity_type: { type: String, default: null },
+    entity_id: { type: String, default: null },
+    details: { type: String, default: '' },
+  },
+  { timestamps: { createdAt: 'created_at', updatedAt: false } },
+)
 
-  CREATE TABLE IF NOT EXISTS checkpoints (
-    id TEXT PRIMARY KEY,
-    shipment_id TEXT NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
-    timestamp TEXT NOT NULL,
-    location TEXT NOT NULL,
-    status_tag TEXT NOT NULL,
-    admin_notes TEXT DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-  CREATE INDEX IF NOT EXISTS idx_checkpoints_shipment ON checkpoints(shipment_id, timestamp);
+export const Admin = model('Admin', adminSchema)
+export const Shipment = model('Shipment', shipmentSchema)
+export const AuditLog = model('AuditLog', auditLogSchema)
 
-  CREATE TABLE IF NOT EXISTS audit_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    admin_id TEXT,
-    admin_email TEXT,
-    action TEXT NOT NULL,
-    entity_type TEXT,
-    entity_id TEXT,
-    details TEXT DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-`)
+// ---------- Connection ----------
+const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL
 
-function seedSuperAdmin() {
+export async function connectDB() {
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI is not set. Copy .env.example to .env and add your Atlas connection string.')
+  }
+  await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
+  console.log('[db] MongoDB connected:', mongoose.connection.name)
+  await seedSuperAdmin()
+}
+
+async function seedSuperAdmin() {
   const email = 'admin@gmail.com'
-  const existing = db.prepare('SELECT id FROM admins WHERE email = ?').get(email)
+  const existing = await Admin.findOne({ email }).lean()
   if (existing) return
-  const hash = bcrypt.hashSync('password123', 10)
-  db.prepare(
-    `INSERT INTO admins (id, email, name, password_hash, role, must_reset_password)
-     VALUES (?, ?, ?, ?, 'super_admin', 1)`,
-  ).run(randomUUID(), email, 'Super Admin', hash)
+  await Admin.create({
+    email,
+    name: 'Super Admin',
+    password_hash: bcrypt.hashSync('password123', 10),
+    role: 'super_admin',
+    must_reset_password: true,
+  })
   console.log('[db] Seeded super admin:', email)
 }
 
-seedSuperAdmin()
-
-export default db
+export { Types }

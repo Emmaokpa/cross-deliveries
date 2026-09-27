@@ -1,6 +1,7 @@
 import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { connectDB } from './db.js'
 import authRouter, { adminUsersRouter, authRequired } from './routes/auth.js'
 import shipmentsRouter from './routes/shipments.js'
 import publicRouter from './routes/public.js'
@@ -45,6 +46,14 @@ app.use((err, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 8787
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[server] CrossBorders API running on http://localhost:${PORT}`)
-})
+
+connectDB()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[server] CrossBorders API running on http://localhost:${PORT}`)
+    })
+  })
+  .catch((err) => {
+    console.error('[server] MongoDB connection failed:', err.message)
+    process.exit(1)
+  })

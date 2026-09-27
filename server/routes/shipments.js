@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import db from '../db.js'
+import { Shipment, Types } from '../db.js'
 import { audit, authRequired } from './auth.js'
 import { STATUS_PROGRESS, TRACKING_URL, generateTrackingNumber, computeFinancials } from '../services/shipment-utils.js'
 import { buildInvoicePdf } from '../services/pdf.js'
@@ -33,219 +33,233 @@ function parseShipment(body) {
   return data
 }
 
-function getShipment(id) {
-  return db.prepare('SELECT * FROM shipments WHERE id = ? OR tracking_number = ?').get(id, id)
-}
-
-function checkpointsFor(shipmentId) {
-  return db.prepare('SELECT * FROM checkpoints WHERE shipment_id = ? ORDER BY timestamp DESC').all(shipmentId)
+async function getShipment(id) {
+  return Shipment.findOne(Types.ObjectId.isValid(id) ? { _id: id } : { tracking_number: id.toUpperCase() })
 }
 
 function withTimeline(shipment) {
-  return { ...shipment, checkpoints: checkpointsFor(shipment.id), tracking_url: TRACKING_URL(shipment.tracking_number) }
+  const doc = shipment.toObject ? shipment.toObject() : shipment
+  return {
+    ...doc,
+    id: String(doc._id),
+    checkpoints: [...(doc.checkpoints || [])].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
+    tracking_url: TRACKING_URL(doc.tracking_number),
+  }
 }
 
 // GET /api/v1/shipments?status=&q=
-router.get('/shipments', (req, res) => {
-  const { status, q } = req.query
-  let sql = 'SELECT * FROM shipments WHERE 1=1'
-  const params = []
-  if (status) {
-    sql += ' AND current_status = ?'
-    params.push(status)
+router.get('/shipments', async (req, res) => {
+  try {
+    const { status, q } = req.query
+    const filter = {}
+    if (status) filter.current_status = status
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+      filter.$or = [
+        { tracking_number: rx },
+        { recipient_name: rx },
+        { sender_name: rx },
+        { recipient_email: rx },
+      ]
+    }
+    const shipments = await Shipment.find(filter).sort({ created_at: -1 }).lean()
+    res.json({ shipments: shipments.map((s) => ({ ...s, id: String(s._id) })) })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
   }
-  if (q) {
-    sql += ' AND (tracking_number LIKE ? OR recipient_name LIKE ? OR sender_name LIKE ? OR recipient_email LIKE ?)'
-    const like = `%${q}%`
-    params.push(like, like, like, like)
-  }
-  sql += ' ORDER BY created_at DESC'
-  const shipments = db.prepare(sql).all(...params)
-  res.json({ shipments })
 })
 
 // POST /api/v1/shipments
-router.post('/shipments', (req, res) => {
+router.post('/shipments', async (req, res) => {
   try {
     const data = parseShipment(req.body || {})
     const fin = computeFinancials(req.body || {})
-    const id = crypto.randomUUID()
-    const tracking = generateTrackingNumber(db)
-    db.prepare(`
-      INSERT INTO shipments (
-        id, tracking_number, sender_name, sender_email, sender_phone, sender_address,
-        recipient_name, recipient_email, recipient_phone, recipient_address,
-        recipient_city, recipient_country, origin_city, destination_city,
-        cargo_type, package_weight, package_dimensions, package_quantity, package_description,
-        base_freight, surcharge_fuel, surcharge_customs, total_cost, payment_status,
-        current_status, progress_percentage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Created', ?)
-    `).run(
-      id, tracking,
-      data.sender_name, data.sender_email, data.sender_phone || '', data.sender_address || '',
-      data.recipient_name, data.recipient_email, data.recipient_phone || '', data.recipient_address || '',
-      data.recipient_city || '', data.recipient_country || '', data.origin_city || '', data.destination_city || '',
-      data.cargo_type || 'Air', data.package_weight || 0, data.package_dimensions || '', data.package_quantity || 1, data.package_description || '',
-      fin.base, fin.fuel, fin.customs, fin.total, data.payment_status || 'Unpaid',
-      STATUS_PROGRESS.Created,
-    )
-    // Initial checkpoint
-    db.prepare(
-      'INSERT INTO checkpoints (id, shipment_id, timestamp, location, status_tag, admin_notes) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(
-      crypto.randomUUID(), id,
-      new Date().toISOString(), data.origin_city || 'Origin facility', 'Created',
-      'Consignment created in system',
-    )
-    audit(req.admin, 'shipment.created', 'shipment', id, `Created ${tracking}`)
-    res.status(201).json({ shipment: withTimeline(getShipment(id)) })
+    const tracking = await generateTrackingNumber()
+    const shipment = await Shipment.create({
+      ...data,
+      tracking_number: tracking,
+      cargo_type: data.cargo_type || 'Air',
+      package_weight: data.package_weight || 0,
+      package_dimensions: data.package_dimensions || '',
+      package_quantity: data.package_quantity || 1,
+      package_description: data.package_description || '',
+      recipient_city: data.recipient_city || '',
+      recipient_country: data.recipient_country || '',
+      origin_city: data.origin_city || '',
+      destination_city: data.destination_city || '',
+      base_freight: fin.base,
+      surcharge_fuel: fin.fuel,
+      surcharge_customs: fin.customs,
+      total_cost: fin.total,
+      payment_status: data.payment_status || 'Unpaid',
+      current_status: 'Created',
+      progress_percentage: STATUS_PROGRESS.Created,
+      checkpoints: [
+        {
+          id: crypto.randomUUID(),
+          timestamp: new Date(),
+          location: data.origin_city || 'Origin facility',
+          status_tag: 'Created',
+          admin_notes: 'Consignment created in system',
+        },
+      ],
+    })
+    await audit(req.admin, 'shipment.created', 'shipment', String(shipment._id), `Created ${tracking}`)
+    res.status(201).json({ shipment: withTimeline(shipment) })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
 })
 
-// GET /api/v1/shipments/:id
-router.get('/shipments/:id', (req, res) => {
-  const shipment = getShipment(req.params.id)
+// GET /api/v1/shipsments/:id — accepts Mongo id or tracking number
+router.get('/shipments/:id', async (req, res) => {
+  const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
   res.json({ shipment: withTimeline(shipment) })
 })
 
 // PATCH /api/v1/shipments/:id — edit consignment details
-router.patch('/shipments/:id', (req, res) => {
-  const shipment = getShipment(req.params.id)
-  if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+router.patch('/shipments/:id', async (req, res) => {
   try {
-    const data = parseShipment({ ...shipment, ...req.body })
-    const fin = computeFinancials({ ...shipment, ...req.body })
-    const fields = [...SHIPMENT_FIELDS, 'base_freight', 'surcharge_fuel', 'surcharge_customs', 'total_cost']
-    const updates = []
-    const params = []
-    for (const f of fields) {
-      const val = f === 'total_cost' ? fin.total : data[f]
-      updates.push(`${f} = ?`)
-      params.push(val)
-    }
-    params.push(shipment.id)
-    db.prepare(`UPDATE shipments SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params)
-    audit(req.admin, 'shipment.updated', 'shipment', shipment.id, `Updated ${shipment.tracking_number}`)
-    res.json({ shipment: withTimeline(getShipment(shipment.id)) })
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const data = parseShipment({ ...shipment.toObject(), ...req.body })
+    const fin = computeFinancials({ ...shipment.toObject(), ...req.body })
+    Object.assign(shipment, data, {
+      base_freight: fin.base,
+      surcharge_fuel: fin.fuel,
+      surcharge_customs: fin.customs,
+      total_cost: fin.total,
+    })
+    await shipment.save()
+    await audit(req.admin, 'shipment.updated', 'shipment', String(shipment._id), `Updated ${shipment.tracking_number}`)
+    res.json({ shipment: withTimeline(shipment) })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
 })
 
-// PATCH /api/v1/shipments/:id/status — "Mark as Shipped" workflow + checkpoint add
-router.patch('/shipments/:id/status', (req, res) => {
-  const shipment = getShipment(req.params.id)
-  if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  const { status, location, notes, backdated_timestamp, trigger_email } = req.body || {}
-  if (!status) return res.status(400).json({ error: 'status is required' })
-  if (!(status in STATUS_PROGRESS)) return res.status(400).json({ error: `Invalid status: ${status}` })
+// PATCH /api/v1/shipments/:id/status — "Mark as Shipped" workflow
+router.patch('/shipments/:id/status', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const { status, location, notes, backdated_timestamp, trigger_email } = req.body || {}
+    if (!status) return res.status(400).json({ error: 'status is required' })
+    if (!(status in STATUS_PROGRESS)) return res.status(400).json({ error: `Invalid status: ${status}` })
 
-  const ts = backdated_timestamp ? new Date(backdated_timestamp) : new Date()
-  if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid backdated_timestamp' })
+    const ts = backdated_timestamp ? new Date(backdated_timestamp) : new Date()
+    if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid backdated_timestamp' })
 
-  db.prepare("UPDATE shipments SET current_status = ?, progress_percentage = ?, updated_at = datetime('now') WHERE id = ?").run(
-    status,
-    STATUS_PROGRESS[status],
-    shipment.id,
-  )
-  db.prepare(
-    'INSERT INTO checkpoints (id, shipment_id, timestamp, location, status_tag, admin_notes) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(
-    crypto.randomUUID(),
-    shipment.id,
-    ts.toISOString(),
-    location || shipment.origin_city || '—',
-    status,
-    notes || '',
-  )
-  audit(req.admin, 'shipment.status_changed', 'shipment', shipment.id, `${shipment.tracking_number}: ${shipment.current_status} → ${status}`)
+    shipment.current_status = status
+    shipment.progress_percentage = STATUS_PROGRESS[status]
+    shipment.checkpoints.push({
+      id: crypto.randomUUID(),
+      timestamp: ts,
+      location: location || shipment.origin_city || '—',
+      status_tag: status,
+      admin_notes: notes || '',
+    })
+    await shipment.save()
+    await audit(req.admin, 'shipment.status_changed', 'shipment', String(shipment._id), `${shipment.tracking_number}: → ${status}`)
 
-  let emailResult = null
-  const emailTriggered = trigger_email === true || (trigger_email === undefined && ['Shipped', 'Out for Delivery'].includes(status))
-  if (emailTriggered) {
-    emailResult = sendShipmentEmail(db, getShipment(shipment.id), req.admin)
+    let emailResult = null
+    const emailTriggered = trigger_email === true || (trigger_email === undefined && ['Shipped', 'Out for Delivery'].includes(status))
+    if (emailTriggered) {
+      emailResult = sendShipmentEmail(shipment, req.admin)
+    }
+    res.json({ shipment: withTimeline(shipment), email: emailResult })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
   }
-  res.json({ shipment: withTimeline(getShipment(shipment.id)), email: emailResult })
 })
 
 // DELETE /api/v1/shipments/:id
-router.delete('/shipments/:id', (req, res) => {
-  const shipment = getShipment(req.params.id)
+router.delete('/shipments/:id', async (req, res) => {
+  const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  db.prepare('DELETE FROM shipments WHERE id = ?').run(shipment.id)
-  audit(req.admin, 'shipment.deleted', 'shipment', shipment.id, `Deleted ${shipment.tracking_number}`)
+  await shipment.deleteOne()
+  await audit(req.admin, 'shipment.deleted', 'shipment', String(shipment._id), `Deleted ${shipment.tracking_number}`)
   res.json({ ok: true })
 })
 
-// --- Checkpoint manager ---
+// --- Checkpoint manager (embedded) ---
 
-// POST /api/v1/shipments/:id/checkpoints (add / backdate)
-router.post('/shipments/:id/checkpoints', (req, res) => {
-  const shipment = getShipment(req.params.id)
-  if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  const { timestamp, location, status_tag, admin_notes } = req.body || {}
-  if (!location || !status_tag) return res.status(400).json({ error: 'location and status_tag are required' })
-  const ts = timestamp ? new Date(timestamp) : new Date()
-  if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid timestamp' })
-  const id = crypto.randomUUID()
-  db.prepare(
-    'INSERT INTO checkpoints (id, shipment_id, timestamp, location, status_tag, admin_notes) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(id, shipment.id, ts.toISOString(), location, status_tag, admin_notes || '')
-  audit(req.admin, 'checkpoint.created', 'shipment', shipment.id, `${shipment.tracking_number}: checkpoint at ${location}`)
-  res.status(201).json({ shipment: withTimeline(getShipment(shipment.id)) })
+// POST /api/v1/shipments/:id/checkpoints
+router.post('/shipments/:id/checkpoints', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const { timestamp, location, status_tag, admin_notes } = req.body || {}
+    if (!location || !status_tag) return res.status(400).json({ error: 'location and status_tag are required' })
+    const ts = timestamp ? new Date(timestamp) : new Date()
+    if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid timestamp' })
+    shipment.checkpoints.push({ id: crypto.randomUUID(), timestamp: ts, location, status_tag, admin_notes: admin_notes || '' })
+    await shipment.save()
+    await audit(req.admin, 'checkpoint.created', 'shipment', String(shipment._id), `${shipment.tracking_number}: checkpoint at ${location}`)
+    res.status(201).json({ shipment: withTimeline(shipment) })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
 })
 
 // PATCH /api/v1/shipments/:id/checkpoints/:cpId
-router.patch('/shipments/:id/checkpoints/:cpId', (req, res) => {
-  const cp = db.prepare('SELECT * FROM checkpoints WHERE id = ? AND shipment_id = ?').get(req.params.cpId, req.params.id)
-  if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
-  const { timestamp, location, status_tag, admin_notes } = req.body || {}
-  let ts = cp.timestamp
-  if (timestamp) {
-    const d = new Date(timestamp)
-    if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid timestamp' })
-    ts = d.toISOString()
+router.patch('/shipments/:id/checkpoints/:cpId', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const cp = shipment.checkpoints.id(req.params.cpId)
+    if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
+    const { timestamp, location, status_tag, admin_notes } = req.body || {}
+    if (timestamp) {
+      const d = new Date(timestamp)
+      if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid timestamp' })
+      cp.timestamp = d
+    }
+    if (location !== undefined) cp.location = location
+    if (status_tag !== undefined) cp.status_tag = status_tag
+    if (admin_notes !== undefined) cp.admin_notes = admin_notes
+    await shipment.save()
+    await audit(req.admin, 'checkpoint.updated', 'shipment', String(shipment._id), `Edited checkpoint ${cp.id}`)
+    res.json({ shipment: withTimeline(shipment) })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
   }
-  db.prepare('UPDATE checkpoints SET timestamp = ?, location = ?, status_tag = ?, admin_notes = ? WHERE id = ?').run(
-    ts,
-    location ?? cp.location,
-    status_tag ?? cp.status_tag,
-    admin_notes ?? cp.admin_notes,
-    cp.id,
-  )
-  audit(req.admin, 'checkpoint.updated', 'shipment', req.params.id, `Edited checkpoint ${cp.id}`)
-  res.json({ shipment: withTimeline(getShipment(req.params.id)) })
 })
 
 // DELETE /api/v1/shipments/:id/checkpoints/:cpId
-router.delete('/shipments/:id/checkpoints/:cpId', (req, res) => {
-  const cp = db.prepare('SELECT * FROM checkpoints WHERE id = ? AND shipment_id = ?').get(req.params.cpId, req.params.id)
-  if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
-  db.prepare('DELETE FROM checkpoints WHERE id = ?').run(cp.id)
-  audit(req.admin, 'checkpoint.deleted', 'shipment', req.params.id, `Deleted checkpoint at ${cp.location}`)
-  res.json({ shipment: withTimeline(getShipment(req.params.id)) })
+router.delete('/shipments/:id/checkpoints/:cpId', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const cp = shipment.checkpoints.id(req.params.cpId)
+    if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
+    cp.deleteOne()
+    await shipment.save()
+    await audit(req.admin, 'checkpoint.deleted', 'shipment', String(shipment._id), `Deleted checkpoint at ${cp.location}`)
+    res.json({ shipment: withTimeline(shipment) })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
 })
 
 // --- Documents ---
 
 // GET /api/v1/shipments/:id/invoice.pdf
-router.get('/shipments/:id/invoice.pdf', (req, res) => {
-  const shipment = getShipment(req.params.id)
+router.get('/shipments/:id/invoice.pdf', async (req, res) => {
+  const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `attachment; filename="${shipment.tracking_number}-invoice.pdf"`)
-  buildInvoicePdf(shipment).pipe(res)
-  audit(req.admin, 'invoice.generated', 'shipment', shipment.id, `PDF invoice for ${shipment.tracking_number}`)
+  buildInvoicePdf(shipment.toObject ? shipment.toObject() : shipment).pipe(res)
+  await audit(req.admin, 'invoice.generated', 'shipment', String(shipment._id), `PDF invoice for ${shipment.tracking_number}`)
 })
 
 // POST /api/v1/shipments/:id/send-email — manual send/resend via Brevo
-router.post('/shipments/:id/send-email', (req, res) => {
-  const shipment = getShipment(req.params.id)
+router.post('/shipments/:id/send-email', async (req, res) => {
+  const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  const result = sendShipmentEmail(db, shipment, req.admin)
+  const result = await sendShipmentEmail(shipment, req.admin)
   res.json(result)
 })
 

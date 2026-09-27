@@ -1,3 +1,5 @@
+import { Shipment } from '../db.js'
+
 export const STATUS_PROGRESS = {
   Created: 5,
   Shipped: 20,
@@ -11,12 +13,12 @@ export const STATUS_PROGRESS = {
 export const TRACKING_URL = (trackingNumber) =>
   `${process.env.APP_DOMAIN || 'http://localhost:5173'}/?tracking=${encodeURIComponent(trackingNumber)}`
 
-export function generateTrackingNumber(db) {
+export async function generateTrackingNumber() {
   const year = new Date().getFullYear()
   for (let attempt = 0; attempt < 25; attempt++) {
     const num = Math.floor(10000 + Math.random() * 90000)
     const candidate = `CBD-${year}-${num}`
-    const exists = db.prepare('SELECT 1 FROM shipments WHERE tracking_number = ?').get(candidate)
+    const exists = await Shipment.exists({ tracking_number: candidate })
     if (!exists) return candidate
   }
   throw new Error('Could not generate a unique tracking number')

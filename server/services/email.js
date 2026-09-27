@@ -1,4 +1,4 @@
-import db from '../db.js'
+import { Shipment } from '../db.js'
 import { audit } from '../routes/auth.js'
 import { TRACKING_URL } from './shipment-utils.js'
 import { buildInvoicePdf } from './pdf.js'
@@ -170,7 +170,7 @@ async function brevoSend({ apiKey, toEmail, toName, subject, html, attachment })
 
 // Compiles the PDF, renders the template, and dispatches via Brevo.
 // Falls back to a logged simulation when BREVO_API_KEY is absent.
-export function sendShipmentEmail(dbConn, shipment, admin) {
+export async function sendShipmentEmail(shipment, admin) {
   const apiKey = process.env.BREVO_API_KEY
   const to = shipment.recipient_email
   const subject = `[${shipment.tracking_number}] Shipment ${shipment.current_status} — CrossBordersDeliveries`
@@ -178,7 +178,7 @@ export function sendShipmentEmail(dbConn, shipment, admin) {
 
   if (!apiKey) {
     console.log(`[email:simulated] → ${to} | ${subject}`)
-    audit(admin, 'email.simulated', 'shipment', shipment.id, `Brevo key not configured; simulated email to ${to}`)
+    await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `Brevo key not configured; simulated email to ${to}`)
     return { sent: false, simulated: true, to, subject, message: 'BREVO_API_KEY not set — email simulated in logs.' }
   }
 
@@ -191,13 +191,13 @@ export function sendShipmentEmail(dbConn, shipment, admin) {
     html,
     attachment: { name: `${shipment.tracking_number}-invoice.pdf`, content: pdfBuffer.toString('base64') },
   })
-    .then(() => {
-      db.prepare("UPDATE shipments SET email_sent_at = datetime('now') WHERE id = ?").run(shipment.id)
-      audit(admin, 'email.sent', 'shipment', shipment.id, `Invoice emailed to ${to} via Brevo`)
+    .then(async () => {
+      await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
+      await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via Brevo`)
     })
-    .catch((err) => {
+    .catch(async (err) => {
       console.error('[brevo] send failed:', err.message)
-      audit(admin, 'email.failed', 'shipment', shipment.id, String(err.message).slice(0, 300))
+      await audit(admin, 'email.failed', 'shipment', String(shipment._id), String(err.message).slice(0, 300))
     })
 
   return { sent: true, queued: true, to, subject, message: 'Email queued for delivery via Brevo.' }
