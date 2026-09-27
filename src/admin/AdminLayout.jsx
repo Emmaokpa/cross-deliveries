@@ -11,7 +11,7 @@ export default function AdminLayout() {
     if (!getToken()) return navigate('/admin/login')
     api('/auth/me')
       .then((d) => setAdmin(d.admin))
-      .catch(() => {})
+      .catch(() => navigate('/admin/login'))
   }, [navigate])
 
   useEffect(() => {
