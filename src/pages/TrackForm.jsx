@@ -5,8 +5,8 @@ export default function TrackFormPage() {
   return (
     <>
       <PageHero title="Logistics" />
-      <section className="section-sm">
-        <div className="container">
+      <section className="section-y">
+        <div className="container-x">
           <TrackForm />
         </div>
       </section>
