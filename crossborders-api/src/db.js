@@ -61,6 +61,7 @@ const shipmentSchema = new Schema(
       default: 'Created',
     },
     progress_percentage: { type: Number, min: 0, max: 100, default: 0 },
+    estimated_delivery: { type: Date, default: null },
     email_sent_at: { type: Date, default: null },
     checkpoints: { type: [checkpointSchema], default: [] },
   },

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { api, downloadBlob } from './api.js'
 import { Badge, Field, Modal, Progress, fmtMoney, fmtDate, useToast } from './components.jsx'
+import CopyChip from './copy.jsx'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
@@ -20,6 +21,10 @@ export default function ShipmentDetail() {
 
   const [cpModal, setCpModal] = useState(null) // null | {mode:'add'} | {mode:'edit', cp}
   const [cpForm, setCpForm] = useState({ timestamp: '', location: '', status_tag: '', admin_notes: '', set_status: '', progress_percentage: '' })
+
+  const [etaEdit, setEtaEdit] = useState(false)
+  const [etaValue, setEtaValue] = useState('')
+  const [etaBusy, setEtaBusy] = useState(false)
 
   const load = () => {
     api(`/v1/shipments/${id}`)
@@ -133,11 +138,32 @@ export default function ShipmentDetail() {
     }
   }
 
+  const openEtaEdit = () => {
+    setEtaValue(s.estimated_delivery ? new Date(s.estimated_delivery).toISOString().slice(0, 16) : '')
+    setEtaEdit(true)
+  }
+
+  const saveEta = async (e) => {
+    e.preventDefault()
+    setEtaBusy(true)
+    try {
+      const body = { estimated_delivery: etaValue || null }
+      const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body })
+      setShipment(data.shipment)
+      setEtaEdit(false)
+      toast(etaValue ? 'Estimated delivery updated.' : 'Estimated delivery cleared.', 'ok')
+    } catch (err) {
+      toast(err.message, 'err')
+    } finally {
+      setEtaBusy(false)
+    }
+  }
+
   return (
     <>
       <div className="page-head">
         <div>
-          <h3><span className="mono">{s.tracking_number}</span> <Badge value={s.current_status} /></h3>
+          <h3><CopyChip value={s.tracking_number} /> <Badge value={s.current_status} /></h3>
           <div className="sub">{s.origin_city || '—'} → {s.destination_city || '—'} • {s.cargo_type} freight • created {fmtDate(s.created_at)}</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -151,6 +177,29 @@ export default function ShipmentDetail() {
           <div className="a-card a-card-pad">
             <h3 style={{ margin: '0 0 6px', color: 'var(--a-navy)' }}>Consignment Overview</h3>
             <Progress value={s.progress_percentage} />
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {etaEdit ? (
+                <form onSubmit={saveEta} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 13, color: '#6b7280' }}>Estimated delivery:</label>
+                  <input
+                    type="datetime-local"
+                    value={etaValue}
+                    onChange={(e) => setEtaValue(e.target.value)}
+                    autoFocus
+                    style={{ padding: '4px 8px', border: '1px solid #e4e8f0', borderRadius: 8 }}
+                  />
+                  <button type="submit" className="btn-a btn-primary-a btn-sm-a" disabled={etaBusy}>{etaBusy ? 'Saving…' : 'Save'}</button>
+                  <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={() => setEtaEdit(false)}>Cancel</button>
+                </form>
+              ) : (
+                <>
+                  <span style={{ fontSize: 13.5, color: '#374151' }}>
+                    Estimated delivery: <strong>{s.estimated_delivery ? fmtDate(s.estimated_delivery) : 'Not set'}</strong>
+                  </span>
+                  <button className="btn-a btn-ghost-a btn-sm-a" onClick={openEtaEdit}>Edit</button>
+                </>
+              )}
+            </div>
             <div className="kv-list" style={{ marginTop: 14 }}>
               <div className="kv"><span className="k">Sender</span><span className="v">{s.sender_name} • {s.sender_email}</span></div>
               <div className="kv"><span className="k">Recipient</span><span className="v">{s.recipient_name} • {s.recipient_email}</span></div>

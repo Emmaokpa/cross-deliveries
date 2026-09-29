@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from './api.js'
 import { Badge, Field, Modal, Progress, EmptyState, fmtMoney, fmtDate, useToast } from './components.jsx'
+import CopyChip from './copy.jsx'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
@@ -82,8 +83,7 @@ export default function Shipments() {
       {error && <div className="alert-a alert-error">{error}</div>}
 
       <div className="a-card">
-        <div className="table-wrap">
-          <table className="data-table">
+        <div className="table-wrap">            <table className="data-table stack-mobile">
             <thead>
               <tr>
                 <th>Tracking #</th><th>Recipient</th><th>Route</th><th>Cargo</th>
@@ -93,18 +93,20 @@ export default function Shipments() {
             <tbody>
               {shipments.map((s) => (
                 <tr key={s.id}>
-                  <td><Link className="mono" to={`/admin/shipments/${s.id}`}>{s.tracking_number}</Link></td>
+                  <td>
+                    <Link to={`/admin/shipments/${s.id}`}><CopyChip value={s.tracking_number} /></Link>
+                  </td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{s.recipient_name}</div>
                     <div style={{ fontSize: 12, color: '#6b7280' }}>{s.recipient_email}</div>
                   </td>
-                  <td style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
-                  <td>{s.cargo_type}</td>
-                  <td style={{ fontWeight: 600 }}>{fmtMoney(s.total_cost)}</td>
-                  <td><Badge value={s.payment_status} /></td>
-                  <td><Badge value={s.current_status} /></td>
-                  <td><Progress value={s.progress_percentage} /></td>
-                  <td style={{ fontSize: 12.5, color: '#6b7280', whiteSpace: 'nowrap' }}>{fmtDate(s.created_at)}</td>
+                  <td data-label="Route" style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
+                  <td data-label="Cargo">{s.cargo_type}</td>
+                  <td data-label="Total" style={{ fontWeight: 600 }}>{fmtMoney(s.total_cost)}</td>
+                  <td data-label="Payment"><Badge value={s.payment_status} /></td>
+                  <td data-label="Status"><Badge value={s.current_status} /></td>
+                  <td data-label="Progress"><Progress value={s.progress_percentage} /></td>
+                  <td data-label="Created" style={{ fontSize: 12.5, color: '#6b7280', whiteSpace: 'nowrap' }}>{fmtDate(s.created_at)}</td>
                 </tr>
               ))}
               {!shipments.length && (

@@ -13,7 +13,7 @@ const SHIPMENT_FIELDS = [
   'recipient_name', 'recipient_email', 'recipient_phone', 'recipient_address',
   'recipient_city', 'recipient_country', 'origin_city', 'destination_city',
   'cargo_type', 'package_weight', 'package_dimensions', 'package_quantity', 'package_description',
-  'base_freight', 'surcharge_fuel', 'surcharge_customs', 'payment_status',
+  'base_freight', 'surcharge_fuel', 'surcharge_customs', 'payment_status', 'estimated_delivery',
 ]
 
 function parseShipment(body) {
@@ -29,6 +29,15 @@ function parseShipment(body) {
   }
   if (!data.sender_email || !data.recipient_email || !data.sender_name || !data.recipient_name) {
     throw new Error('Sender and recipient name and email are required')
+  }
+  if (data.estimated_delivery !== undefined) {
+    if (data.estimated_delivery === null || data.estimated_delivery === '') {
+      data.estimated_delivery = null // explicit clear
+    } else {
+      const d = new Date(data.estimated_delivery)
+      if (Number.isNaN(d.getTime())) throw new Error('estimated_delivery must be a valid date')
+      data.estimated_delivery = d
+    }
   }
   return data
 }

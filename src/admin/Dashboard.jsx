@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from './api.js'
 import { Badge, Progress, fmtMoney, fmtDate } from './components.jsx'
+import CopyChip from './copy.jsx'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
@@ -74,18 +75,18 @@ export default function Dashboard() {
             <h3 style={{ margin: 0, color: 'var(--a-navy)' }}>Recent Shipments</h3>
           </div>
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table stack-mobile">
               <thead>
                 <tr><th>Tracking</th><th>Recipient</th><th>Route</th><th>Status</th><th>Progress</th></tr>
               </thead>
               <tbody>
                 {shipments.slice(0, 6).map((s) => (
                   <tr key={s.id}>
-                    <td><Link className="mono" to={`/admin/shipments/${s.id}`}>{s.tracking_number}</Link></td>
-                    <td>{s.recipient_name}</td>
-                    <td style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
-                    <td><Badge value={s.current_status} /></td>
-                    <td><Progress value={s.progress_percentage} /></td>
+                    <td data-label="Tracking"><Link className="mono" to={`/admin/shipments/${s.id}`}><CopyChip value={s.tracking_number} /></Link></td>
+                    <td data-label="Recipient">{s.recipient_name}</td>
+                    <td data-label="Route" style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
+                    <td data-label="Status"><Badge value={s.current_status} /></td>
+                    <td data-label="Progress"><Progress value={s.progress_percentage} /></td>
                   </tr>
                 ))}
                 {!shipments.length && (

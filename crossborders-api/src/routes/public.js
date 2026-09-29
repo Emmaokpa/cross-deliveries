@@ -28,7 +28,7 @@ router.get('/track/:tracking_id', async (req, res) => {
       cargo_type: shipment.cargo_type,
       package_description: shipment.package_description,
       checkpoints,
-      estimated_delivery: null,
+      estimated_delivery: shipment.estimated_delivery || null,
     })
   } catch (e) {
     res.status(500).json({ error: 'Tracking lookup failed' })

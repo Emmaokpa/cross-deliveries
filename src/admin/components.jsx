@@ -84,7 +84,7 @@ export function EmptyState({ icon = '📦', title, hint }) {
 }
 
 export function fmtMoney(n) {
-  return `$${Number(n || 0).toFixed(2)}`
+  return `₦${Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function fmtDate(iso) {

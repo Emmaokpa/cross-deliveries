@@ -367,6 +367,67 @@ table.data-table {
 .data-table tbody tr:hover { background: #f8faff; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
+/* Copy-to-clipboard chip (tracking numbers) */
+.copy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.copy-chip:hover { background: #eef3fb; border-color: #c7d4ea; }
+.copy-chip.copied { border-color: #86dfa8; background: #e9f9ef; color: #15803d; }
+
+/* ---------- Mobile card view for tables ----------
+   On small screens each table row becomes a stacked card.
+   Pages opt in with <table class="data-table stack-mobile"> and
+   data-label attributes on <td>s. */
+@media (max-width: 640px) {
+  table.data-table.stack-mobile thead { display: none; }
+  table.data-table.stack-mobile,
+  table.data-table.stack-mobile tbody,
+  table.data-table.stack-mobile tr,
+  table.data-table.stack-mobile td {
+    display: block;
+    width: 100%;
+  }
+  table.data-table.stack-mobile tr {
+    border: 1px solid var(--a-border);
+    border-radius: 12px;
+    margin: 0 0 12px;
+    padding: 4px 14px;
+    background: #fff;
+  }
+  table.data-table.stack-mobile td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed #eef1f6;
+    text-align: right;
+  }
+  table.data-table.stack-mobile td:last-child { border-bottom: none; }
+  table.data-table.stack-mobile td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--a-muted);
+    font-weight: 600;
+    text-align: left;
+    flex-shrink: 0;
+  }
+}
+
 .mono { font-family: 'Oswald', sans-serif; letter-spacing: 0.5px; color: var(--a-navy); font-weight: 600; }
 
 /* ---------- Badges ---------- */
