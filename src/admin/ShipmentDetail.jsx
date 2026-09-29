@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { api, downloadBlob } from './api.js'
 import { Badge, Field, Modal, Progress, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
@@ -157,6 +157,10 @@ export default function ShipmentDetail() {
   const [podSig, setPodSig] = useState(null)
   const [podEmpty, setPodEmpty] = useState(true)
   const [podBusy, setPodBusy] = useState(false)
+  const [delOpen, setDelOpen] = useState(false)
+  const [delText, setDelText] = useState('')
+  const [delBusy, setDelBusy] = useState(false)
+  const navigate = useNavigate()
 
   const load = () => {
     api(`/v1/shipments/${id}`)
@@ -303,6 +307,22 @@ export default function ShipmentDetail() {
     }
   }
 
+  const deleteShipment = async (e) => {
+    e.preventDefault()
+    if (delText.trim().toUpperCase() !== s.tracking_number.toUpperCase()) {
+      return toast('Type the tracking number exactly to confirm deletion.', 'err')
+    }
+    setDelBusy(true)
+    try {
+      await api(`/v1/shipments/${s.id}`, { method: 'DELETE' })
+      toast(`Shipment ${s.tracking_number} deleted.`, 'ok')
+      navigate('/admin/shipments')
+    } catch (err) {
+      toast(err.message, 'err')
+      setDelBusy(false)
+    }
+  }
+
   const setE = (k) => (e) => setEditForm((f) => ({ ...f, [k]: e.target.value }))
 
   const openEdit = () => {
@@ -405,6 +425,7 @@ export default function ShipmentDetail() {
           <button className="btn-a btn-primary-a" onClick={openEdit}>✎ Edit Details</button>
           <button className="btn-a btn-ghost-a" onClick={getInvoice}>⬇ Invoice PDF</button>
           <button className="btn-a btn-navy-a" onClick={sendEmail}>✉ Send / Resend Email</button>
+          <button className="btn-a btn-danger-a" onClick={() => { setDelText(''); setDelOpen(true) }}>🗑 Delete</button>
         </div>
       </div>
 
@@ -587,6 +608,31 @@ export default function ShipmentDetail() {
           </div>
         </div>
       </div>
+
+      {delOpen && (
+        <Modal
+          title="Delete Shipment"
+          onClose={() => setDelOpen(false)}
+          footer={
+            <>
+              <button className="btn-a btn-ghost-a" onClick={() => setDelOpen(false)}>Cancel</button>
+              <button className="btn-a btn-danger-a" onClick={deleteShipment} disabled={delBusy || delText.trim().toUpperCase() !== s.tracking_number.toUpperCase()}>
+                {delBusy ? 'Deleting…' : 'Delete Permanently'}
+              </button>
+            </>
+          }
+        >
+          <form onSubmit={deleteShipment}>
+            <div className="alert-a alert-error" style={{ marginBottom: 14 }}>
+              This permanently deletes <strong>{s.tracking_number}</strong> ({s.recipient_name}) including its checkpoint
+              history and proof of delivery. <strong>This cannot be undone.</strong>
+            </div>
+            <Field label={`Type "${s.tracking_number}" to confirm`} required>
+              <input value={delText} onChange={(e) => setDelText(e.target.value)} autoFocus placeholder={s.tracking_number} />
+            </Field>
+          </form>
+        </Modal>
+      )}
 
       {editOpen && editForm && (
         <Modal

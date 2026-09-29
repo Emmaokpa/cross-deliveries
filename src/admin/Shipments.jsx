@@ -25,6 +25,8 @@ export default function Shipments() {
   const [error, setError] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
   const toast = useToast()
+  const [delTarget, setDelTarget] = useState(null)
+  const [delBusy, setDelBusy] = useState(false)
 
   const load = () => {
     const params = new URLSearchParams()
@@ -45,6 +47,21 @@ export default function Shipments() {
   }, [searchParams, setSearchParams])
 
   const setF = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const confirmDelete = async () => {
+    if (!delTarget) return
+    setDelBusy(true)
+    try {
+      await api(`/v1/shipments/${delTarget.id}`, { method: 'DELETE' })
+      toast(`Shipment ${delTarget.tracking_number} deleted.`, 'ok')
+      setDelTarget(null)
+      load()
+    } catch (err) {
+      toast(err.message, 'err')
+    } finally {
+      setDelBusy(false)
+    }
+  }
 
   const create = async (e) => {
     e.preventDefault()
@@ -98,6 +115,14 @@ export default function Shipments() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Link className="mono" to={`/admin/shipments/${s.id}`}>{s.tracking_number}</Link>
                       <CopyChip value={s.tracking_number} label="" className="copy-icon" title={`Copy ${s.tracking_number}`} />
+                      <button
+                        className="copy-chip copy-icon"
+                        style={{ color: 'var(--a-red)' }}
+                        title={`Delete ${s.tracking_number}`}
+                        onClick={() => setDelTarget(s)}
+                      >
+                        🗑
+                      </button>
                     </div>
                   </td>
                   <td>
@@ -187,6 +212,26 @@ export default function Shipments() {
               </Field>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {delTarget && (
+        <Modal
+          title="Delete Shipment"
+          onClose={() => setDelTarget(null)}
+          footer={
+            <>
+              <button className="btn-a btn-ghost-a" onClick={() => setDelTarget(null)}>Cancel</button>
+              <button className="btn-a btn-danger-a" onClick={confirmDelete} disabled={delBusy}>
+                {delBusy ? 'Deleting…' : 'Delete Permanently'}
+              </button>
+            </>
+          }
+        >
+          <div className="alert-a alert-error" style={{ marginBottom: 10 }}>
+            Permanently delete <strong>{delTarget.tracking_number}</strong> ({delTarget.recipient_name})? This removes its
+            checkpoints and proof of delivery and <strong>cannot be undone</strong>.
+          </div>
         </Modal>
       )}
     </>
