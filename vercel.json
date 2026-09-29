@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://cross-deliveries.onrender.com/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/:path*", "destination": "https://cross-deliveries.onrender.com/api/:path*" },
+    { "source": "/:path*", "destination": "/index.html" }
   ]
 }
