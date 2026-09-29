@@ -257,7 +257,7 @@ function renderTemplate(shipment) {
             <td style="padding:16px 34px 28px;text-align:center;">
               <div style="color:#9CA3AF;font-size:11.5px;line-height:1.8;">
                 <strong style="color:${NAVY};">CrossBordersDeliveries</strong> — leading logistics and distribution services<br />
-                No. 19/3 PK. 34810 Beykoz / Istanbul, Türkiye &bull; support@crossbordersdeliveries.com &bull; +90 806 055 2123<br />
+                No. 19/3 PK. 34810 Beykoz / Istanbul, Türkiye &bull; crossborder.delivery@outlook.com &bull; +90 806 055 2123<br />
                 <span style="font-size:10.5px;">This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.</span>
               </div>
             </td>
@@ -314,6 +314,43 @@ function smtpTransport() {
   })
 }
 
+// Brevo HTTP API (HTTPS/443) — cloud hosts like Render often block outbound
+// SMTP ports entirely; port 443 is always open. Preferred when BREVO_API_KEY
+// is set. Docs: https://developers.brevo.com/reference/sendtransacionalemail
+async function sendViaBrevoApi({ to, subject, html, attachments }) {
+  const key = process.env.BREVO_API_KEY
+  if (!key) return null
+
+  // nodemailer attachment shapes → Brevo API shapes
+  const brevoAttachments = []
+  for (const a of attachments || []) {
+    if (a.path) {
+      brevoAttachments.push({ name: a.filename, content: fs.readFileSync(a.path).toString('base64') })
+    } else if (a.content) {
+      brevoAttachments.push({ name: a.filename, content: Buffer.from(a.content).toString('base64') })
+    }
+  }
+
+  const body = {
+    sender: { name: 'CrossBordersDeliveries', email: process.env.MAIL_FROM || 'crossborder.delivery@outlook.com' },
+    to: [{ email: to }],
+    subject,
+    htmlContent: html,
+    attachment: brevoAttachments,
+  }
+
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': key, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(`Brevo API ${res.status}: ${data.message || JSON.stringify(data).slice(0, 200)}`)
+  }
+  return data // { messageId, … }
+}
+
 // Compiles the PDF, renders the template, and sends via SMTP (with the brand
 // logo inline and the invoice attached). Falls back to a logged simulation
 // when SMTP env vars are absent.
@@ -321,15 +358,10 @@ export async function sendShipmentEmail(shipment, admin) {
   const to = shipment.recipient_email
   const subject = `[${shipment.tracking_number}] Shipment ${shipment.current_status} — CrossBordersDeliveries`
   const html = fillTemplate(shipment)
-  const transport = smtpTransport()
 
-  if (!transport) {
-    console.log(`[email:simulated] → ${to} | ${subject}`)
-    await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `SMTP not configured; simulated email to ${to}`)
-    return { sent: false, simulated: true, to, subject, message: 'SMTP not configured — email simulated in logs.' }
-  }
+  const mailFrom = process.env.MAIL_FROM || 'crossborder.delivery@outlook.com'
 
-  // buildInvoicePdf returns a PDFKit stream — collect it into a Buffer
+  // Build the invoice attachment once (used by both send paths)
   const invoicePdf = await new Promise((resolve, reject) => {
     const chunks = []
     const doc = buildInvoicePdf(shipment)
@@ -340,13 +372,44 @@ export async function sendShipmentEmail(shipment, admin) {
   const attachments = [
     { filename: `${shipment.tracking_number}-invoice.pdf`, content: invoicePdf, contentType: 'application/pdf' },
   ]
-  if (fs.existsSync(LOGO_PATH)) {
+  const logoExists = fs.existsSync(LOGO_PATH)
+  if (logoExists) {
     attachments.push({ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID })
+  }
+
+  // ── Preferred path: Brevo HTTP API (works when SMTP ports are blocked) ──
+  if (process.env.BREVO_API_KEY) {
+    try {
+      // The API can't inline CID images — embed the logo as a base64 data URI instead
+      let htmlApi = html
+      if (logoExists) {
+        htmlApi = html.replaceAll(
+          `src="cid:${LOGO_CID}"`,
+          `src="data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}"`,
+        )
+      }
+      await sendViaBrevoApi({ to, subject, html: htmlApi, attachments })
+      await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
+      await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via Brevo API`)
+      return { sent: true, to, subject, message: 'Email sent via Brevo API (HTTPS).' }
+    } catch (err) {
+      console.error('[brevo-api] send failed:', err.message)
+      await audit(admin, 'email.failed', 'shipment', String(shipment._id), `Brevo API: ${String(err.message).slice(0, 200)}`)
+      return { sent: false, error: err.message, to, subject, message: `Brevo API send failed — ${err.message}` }
+    }
+  }
+
+  // ── Fallback: SMTP ──
+  const transport = smtpTransport()
+  if (!transport) {
+    console.log(`[email:simulated] → ${to} | ${subject}`)
+    await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `No BREVO_API_KEY / SMTP configured; simulated email to ${to}`)
+    return { sent: false, simulated: true, to, subject, message: 'Email not configured — simulated in logs. Set BREVO_API_KEY.' }
   }
 
   try {
     await transport.sendMail({
-      from: `"CrossBordersDeliveries" <${process.env.MAIL_FROM || 'no-reply@crossbordersdeliveries.com'}>`,
+      from: `"CrossBordersDeliveries" <${mailFrom}>`,
       to,
       subject,
       html,
@@ -359,7 +422,7 @@ export async function sendShipmentEmail(shipment, admin) {
     const { SMTP_HOST, SMTP_PORT } = process.env
     const hint =
       err.code === 'ETIMEDOUT' || /timeout/i.test(err.message)
-        ? ` — could not reach ${SMTP_HOST || '(unset)'}:${SMTP_PORT || 587}. Check SMTP_HOST/SMTP_PORT on the host, provider firewall, and that the port matches (587 STARTTLS vs 465 TLS).`
+        ? ` — could not reach ${SMTP_HOST || '(unset)'}:${SMTP_PORT || 587}. This host's SMTP port appears blocked — set BREVO_API_KEY to send over HTTPS instead.`
         : err.code === 'EAUTH'
           ? ' — authentication rejected. For Gmail use an App Password; for Brevo use the SMTP key.'
           : ''

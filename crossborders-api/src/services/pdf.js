@@ -76,7 +76,7 @@ function drawLetterhead(doc, shipment) {
   doc.text('CrossBordersDeliveries', 92, 26)
   doc.font('Helvetica').fontSize(8).fillColor('#B9C2D8')
   doc.text('GLOBAL LOGISTICS & COURIER SERVICES  •  AIR  •  OCEAN  •  ROAD', 92, 47)
-  doc.text('crossbordersdeliveries.com  •  support@crossbordersdeliveries.com  •  +90 806 055 2123', 92, 60)
+  doc.text('crossbordersdeliveries.com  •  crossborder.delivery@outlook.com  •  +90 806 055 2123', 92, 60)
 
   // QR code top-right linking to public tracking
   try {

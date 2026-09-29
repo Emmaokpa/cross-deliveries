@@ -309,7 +309,9 @@ router.patch('/shipments/:id/checkpoints/:cpId', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    const cp = shipment.checkpoints.id(req.params.cpId)
+    // checkpoints use a custom UUID `id` field (schema has _id:false), so the
+    // Mongoose DocumentArray#id() helper can't find them — match manually.
+    const cp = shipment.checkpoints.find((c) => c.id === req.params.cpId)
     if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
     const { timestamp, location, status_tag, admin_notes } = req.body || {}
     if (timestamp) {
@@ -333,9 +335,10 @@ router.delete('/shipments/:id/checkpoints/:cpId', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    const cp = shipment.checkpoints.id(req.params.cpId)
-    if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
-    cp.deleteOne()
+    const idx = shipment.checkpoints.findIndex((c) => c.id === req.params.cpId)
+    if (idx === -1) return res.status(404).json({ error: 'Checkpoint not found' })
+    const cp = shipment.checkpoints[idx]
+    shipment.checkpoints.splice(idx, 1)
     await shipment.save()
     await audit(req.admin, 'checkpoint.deleted', 'shipment', String(shipment._id), `Deleted checkpoint at ${cp.location}`)
     res.json({ shipment: withTimeline(shipment) })
