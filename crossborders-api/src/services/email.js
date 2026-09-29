@@ -297,21 +297,44 @@ function escapeHtml(s = '') {
 }
 
 // SMTP transport (Brevo SMTP, Gmail, Mailgun, Mailtrap… any provider).
-// Returns null when SMTP is not configured → emails are simulated in logs.
-function smtpTransport() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null
-  const port = Number(SMTP_PORT) || 587
+// Some cloud hosts (Render included) can't reach common SMTP ports, so the
+// sender tries each candidate port in turn before giving up.
+function buildSmtpTransport(port) {
+  const { SMTP_HOST, SMTP_USER, SMTP_PASS } = process.env
   return nodemailer.createTransport({
     host: SMTP_HOST,
     port,
-    secure: port === 465, // 465 = implicit TLS, 587 = STARTTLS
+    secure: port === 465, // 465 = implicit TLS, 587/2525 = STARTTLS
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    // Fail fast with a clear error instead of hanging on unreachable servers
-    connectionTimeout: 15_000,
-    greetingTimeout: 15_000,
-    socketTimeout: 30_000,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   })
+}
+
+function smtpConfigured() {
+  const { SMTP_HOST, SMTP_USER, SMTP_PASS } = process.env
+  return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS)
+}
+
+// Tries SMTP_PORT first, then Brevo's alternates (2525, 465).
+// Throws the last error if every port fails.
+async function sendViaSmtp(mailOptions) {
+  const { SMTP_PORT } = process.env
+  const ports = [...new Set([Number(SMTP_PORT) || 587, 2525, 465])]
+  let lastErr
+  for (const port of ports) {
+    try {
+      await buildSmtpTransport(port).sendMail(mailOptions)
+      return { port }
+    } catch (err) {
+      lastErr = err
+      console.warn(`[smtp] port ${port} failed: ${err.code || 'error'} ${err.message}`)
+      // Auth rejection means the server IS reachable — no point trying other ports
+      if (err.code === 'EAUTH' || err.responseCode === 535) throw err
+    }
+  }
+  throw lastErr
 }
 
 // Brevo HTTP API (HTTPS/443) — cloud hosts like Render often block outbound
@@ -399,16 +422,15 @@ export async function sendShipmentEmail(shipment, admin) {
     }
   }
 
-  // ── Fallback: SMTP ──
-  const transport = smtpTransport()
-  if (!transport) {
+  // ── Fallback: SMTP (tries ports 587 → 2525 → 465) ──
+  if (!smtpConfigured()) {
     console.log(`[email:simulated] → ${to} | ${subject}`)
     await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `No BREVO_API_KEY / SMTP configured; simulated email to ${to}`)
     return { sent: false, simulated: true, to, subject, message: 'Email not configured — simulated in logs. Set BREVO_API_KEY.' }
   }
 
   try {
-    await transport.sendMail({
+    const { port } = await sendViaSmtp({
       from: `"CrossBordersDeliveries" <${mailFrom}>`,
       to,
       subject,
@@ -416,15 +438,15 @@ export async function sendShipmentEmail(shipment, admin) {
       attachments,
     })
     await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
-    await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via SMTP`)
-    return { sent: true, to, subject, message: 'Email sent via SMTP.' }
+    await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via SMTP port ${port}`)
+    return { sent: true, to, subject, message: `Email sent via SMTP (port ${port}).` }
   } catch (err) {
-    const { SMTP_HOST, SMTP_PORT } = process.env
+    const { SMTP_HOST } = process.env
     const hint =
       err.code === 'ETIMEDOUT' || /timeout/i.test(err.message)
-        ? ` — could not reach ${SMTP_HOST || '(unset)'}:${SMTP_PORT || 587}. This host's SMTP port appears blocked — set BREVO_API_KEY to send over HTTPS instead.`
+        ? ` — could not reach ${SMTP_HOST || '(unset)'} on ports 587/2525/465. Outbound SMTP is blocked from this host — set BREVO_API_KEY (API key, not SMTP key) to send over HTTPS instead.`
         : err.code === 'EAUTH'
-          ? ' — authentication rejected. For Gmail use an App Password; for Brevo use the SMTP key.'
+          ? ' — authentication rejected by the SMTP server. Check the SMTP user/key.'
           : ''
     console.error(`[smtp] send failed (${err.code || 'error'}): ${err.message}${hint}`)
     await audit(admin, 'email.failed', 'shipment', String(shipment._id), `${err.code || 'error'}: ${String(err.message).slice(0, 200)}`)
