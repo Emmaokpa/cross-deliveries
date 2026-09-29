@@ -75,6 +75,9 @@ export default function ShipmentDetail() {
   const [progressBusy, setProgressBusy] = useState(false)
   const [curEdit, setCurEdit] = useState(false)
   const [curValue, setCurValue] = useState('')
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState(null)
+  const [editBusy, setEditBusy] = useState(false)
 
   const load = () => {
     api(`/v1/shipments/${id}`)
@@ -188,6 +191,42 @@ export default function ShipmentDetail() {
     }
   }
 
+  const setE = (k) => (e) => setEditForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const openEdit = () => {
+    setEditForm({
+      sender_name: s.sender_name || '', sender_email: s.sender_email || '', sender_phone: s.sender_phone || '', sender_address: s.sender_address || '',
+      recipient_name: s.recipient_name || '', recipient_email: s.recipient_email || '', recipient_phone: s.recipient_phone || '', recipient_address: s.recipient_address || '',
+      recipient_city: s.recipient_city || '', recipient_country: s.recipient_country || '',
+      origin_city: s.origin_city || '', destination_city: s.destination_city || '',
+      cargo_type: s.cargo_type || 'Air', package_weight: s.package_weight ?? '', package_dimensions: s.package_dimensions || '',
+      package_quantity: s.package_quantity ?? 1, package_description: s.package_description || '',
+      base_freight: s.base_freight ?? '', surcharge_fuel: s.surcharge_fuel ?? '', surcharge_customs: s.surcharge_customs ?? '',
+      payment_status: s.payment_status || 'Unpaid', currency: s.currency || 'NGN',
+    })
+    setEditOpen(true)
+  }
+
+  const saveEdit = async (e) => {
+    e.preventDefault()
+    setEditBusy(true)
+    try {
+      const body = { ...editForm }
+      // Blank numerics fall back to existing stored values (backend merges)
+      for (const k of ['package_weight', 'package_quantity', 'base_freight', 'surcharge_fuel', 'surcharge_customs']) {
+        if (body[k] === '') delete body[k]
+      }
+      const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body })
+      setShipment(data.shipment)
+      setEditOpen(false)
+      toast('Shipment details updated.', 'ok')
+    } catch (err) {
+      toast(err.message, 'err')
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
   const saveProgress = async (pct) => {
     setProgressBusy(true)
     try {
@@ -247,6 +286,7 @@ export default function ShipmentDetail() {
           <div className="sub">{s.origin_city || '—'} → {s.destination_city || '—'} • {s.cargo_type} freight • created {fmtDate(s.created_at)}</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn-a btn-primary-a" onClick={openEdit}>✎ Edit Details</button>
           <button className="btn-a btn-ghost-a" onClick={getInvoice}>⬇ Invoice PDF</button>
           <button className="btn-a btn-navy-a" onClick={sendEmail}>✉ Send / Resend Email</button>
         </div>
@@ -374,6 +414,74 @@ export default function ShipmentDetail() {
           </div>
         </div>
       </div>
+
+      {editOpen && editForm && (
+        <Modal
+          title={`Edit Shipment ${s.tracking_number}`}
+          onClose={() => setEditOpen(false)}
+          wide
+          footer={
+            <>
+              <button className="btn-a btn-ghost-a" onClick={() => setEditOpen(false)}>Cancel</button>
+              <button className="btn-a btn-primary-a" onClick={saveEdit} disabled={editBusy}>{editBusy ? 'Saving…' : 'Save Changes'}</button>
+            </>
+          }
+        >
+          <form onSubmit={saveEdit}>
+            <h4 style={{ color: 'var(--a-navy)', margin: '0 0 10px' }}>Sender</h4>
+            <div className="form-grid">
+              <Field label="Name" required><input value={editForm.sender_name} onChange={setE('sender_name')} required /></Field>
+              <Field label="Email" required><input type="email" value={editForm.sender_email} onChange={setE('sender_email')} required /></Field>
+              <Field label="Phone"><input value={editForm.sender_phone} onChange={setE('sender_phone')} /></Field>
+              <Field label="Address"><input value={editForm.sender_address} onChange={setE('sender_address')} /></Field>
+            </div>
+
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Recipient</h4>
+            <div className="form-grid">
+              <Field label="Name" required><input value={editForm.recipient_name} onChange={setE('recipient_name')} required /></Field>
+              <Field label="Email" required><input type="email" value={editForm.recipient_email} onChange={setE('recipient_email')} required /></Field>
+              <Field label="Phone"><input value={editForm.recipient_phone} onChange={setE('recipient_phone')} /></Field>
+              <Field label="Delivery address"><input value={editForm.recipient_address} onChange={setE('recipient_address')} /></Field>
+              <Field label="City"><input value={editForm.recipient_city} onChange={setE('recipient_city')} /></Field>
+              <Field label="Country"><input value={editForm.recipient_country} onChange={setE('recipient_country')} /></Field>
+            </div>
+
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Package & Route</h4>
+            <div className="form-grid">
+              <Field label="Origin city"><input value={editForm.origin_city} onChange={setE('origin_city')} /></Field>
+              <Field label="Destination city"><input value={editForm.destination_city} onChange={setE('destination_city')} /></Field>
+              <Field label="Cargo type">
+                <select value={editForm.cargo_type} onChange={setE('cargo_type')}>
+                  <option>Air</option><option>Ocean</option><option>Road</option>
+                </select>
+              </Field>
+              <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={editForm.package_weight} onChange={setE('package_weight')} /></Field>
+              <Field label="Dimensions"><input value={editForm.package_dimensions} onChange={setE('package_dimensions')} /></Field>
+              <Field label="Quantity"><input type="number" min="1" value={editForm.package_quantity} onChange={setE('package_quantity')} /></Field>
+              <Field label="Description"><input value={editForm.package_description} onChange={setE('package_description')} /></Field>
+            </div>
+
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials</h4>
+            <div className="form-grid">
+              <Field label="Currency">
+                <select value={editForm.currency} onChange={setE('currency')}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.country} — {c.code} ({c.symbol})</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Base freight"><input type="number" step="0.01" min="0" value={editForm.base_freight} onChange={setE('base_freight')} /></Field>
+              <Field label="Fuel surcharge"><input type="number" step="0.01" min="0" value={editForm.surcharge_fuel} onChange={setE('surcharge_fuel')} /></Field>
+              <Field label="Customs & handling"><input type="number" step="0.01" min="0" value={editForm.surcharge_customs} onChange={setE('surcharge_customs')} /></Field>
+              <Field label="Payment status">
+                <select value={editForm.payment_status} onChange={setE('payment_status')}>
+                  <option>Unpaid</option><option>Paid</option><option>Pending</option>
+                </select>
+              </Field>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {cpModal && (
         <Modal
