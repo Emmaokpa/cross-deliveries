@@ -365,6 +365,9 @@ async function sendViaBrevoApi({ to, subject, html, attachments }) {
 
   const body = {
     sender: { name: 'CrossBordersDeliveries', email: process.env.MAIL_FROM || 'crossborder.delivery@outlook.com' },
+    // Customers who hit "reply" write to this address — it does NOT need to be
+    // verified in Brevo (only the sender does)
+    replyTo: { email: process.env.MAIL_REPLY_TO || 'crossborder.delivery@outlook.com' },
     to: [{ email: to }],
     subject,
     htmlContent: html,
@@ -392,6 +395,8 @@ export async function sendShipmentEmail(shipment, admin) {
   const html = fillTemplate(shipment)
 
   const mailFrom = process.env.MAIL_FROM || 'crossborder.delivery@outlook.com'
+  // Display/reply address — does not need Brevo verification
+  const replyTo = process.env.MAIL_REPLY_TO || 'crossborder.delivery@outlook.com'
 
   // Build the invoice attachment once (used by both send paths)
   const invoicePdf = await new Promise((resolve, reject) => {
@@ -441,6 +446,7 @@ export async function sendShipmentEmail(shipment, admin) {
   try {
     const { port } = await sendViaSmtp({
       from: `"CrossBordersDeliveries" <${mailFrom}>`,
+      replyTo,
       to,
       subject,
       html,
