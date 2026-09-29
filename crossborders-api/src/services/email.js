@@ -325,7 +325,14 @@ export async function sendShipmentEmail(shipment, admin) {
     return { sent: false, simulated: true, to, subject, message: 'SMTP not configured — email simulated in logs.' }
   }
 
-  const invoicePdf = Buffer.from(buildInvoicePdf(shipment).output())
+  // buildInvoicePdf returns a PDFKit stream — collect it into a Buffer
+  const invoicePdf = await new Promise((resolve, reject) => {
+    const chunks = []
+    const doc = buildInvoicePdf(shipment)
+    doc.on('data', (c) => chunks.push(c))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
+  })
   const attachments = [
     { filename: `${shipment.tracking_number}-invoice.pdf`, content: invoicePdf, contentType: 'application/pdf' },
   ]
