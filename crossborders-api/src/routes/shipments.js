@@ -144,15 +144,25 @@ router.patch('/shipments/:id/status', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    const { status, location, notes, backdated_timestamp, trigger_email } = req.body || {}
+    const { status, location, notes, backdated_timestamp, trigger_email, progress_percentage } = req.body || {}
     if (!status) return res.status(400).json({ error: 'status is required' })
     if (!(status in STATUS_PROGRESS)) return res.status(400).json({ error: `Invalid status: ${status}` })
 
     const ts = backdated_timestamp ? new Date(backdated_timestamp) : new Date()
     if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid backdated_timestamp' })
 
+    // Progress defaults to the status preset but can be set manually (0-100)
+    let progress = STATUS_PROGRESS[status]
+    if (progress_percentage !== undefined && progress_percentage !== null && progress_percentage !== '') {
+      const p = Number(progress_percentage)
+      if (!Number.isFinite(p) || p < 0 || p > 100) {
+        return res.status(400).json({ error: 'progress_percentage must be a number between 0 and 100' })
+      }
+      progress = Math.round(p)
+    }
+
     shipment.current_status = status
-    shipment.progress_percentage = STATUS_PROGRESS[status]
+    shipment.progress_percentage = progress
     shipment.checkpoints.push({
       id: crypto.randomUUID(),
       timestamp: ts,
@@ -186,17 +196,42 @@ router.delete('/shipments/:id', async (req, res) => {
 // --- Checkpoint manager (embedded) ---
 
 // POST /api/v1/shipments/:id/checkpoints
+// Optional body fields beyond the checkpoint itself:
+//   set_status — also move the shipment to this status
+//   progress_percentage — manually set the progress bar (0-100); defaults to the set_status preset
 router.post('/shipments/:id/checkpoints', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    const { timestamp, location, status_tag, admin_notes } = req.body || {}
+    const { timestamp, location, status_tag, admin_notes, set_status, progress_percentage } = req.body || {}
     if (!location || !status_tag) return res.status(400).json({ error: 'location and status_tag are required' })
+    if (set_status !== undefined && set_status !== '' && !(set_status in STATUS_PROGRESS)) {
+      return res.status(400).json({ error: `Invalid set_status: ${set_status}` })
+    }
+    let progress = null
+    if (progress_percentage !== undefined && progress_percentage !== null && progress_percentage !== '') {
+      const p = Number(progress_percentage)
+      if (!Number.isFinite(p) || p < 0 || p > 100) {
+        return res.status(400).json({ error: 'progress_percentage must be a number between 0 and 100' })
+      }
+      progress = Math.round(p)
+    }
     const ts = timestamp ? new Date(timestamp) : new Date()
     if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid timestamp' })
     shipment.checkpoints.push({ id: crypto.randomUUID(), timestamp: ts, location, status_tag, admin_notes: admin_notes || '' })
+
+    // A journey marker can drive the shipment's public status and progress bar
+    const statusChanged = set_status !== undefined && set_status !== '' && set_status !== shipment.current_status
+    if (statusChanged) shipment.current_status = set_status
+    if (progress === null && set_status !== undefined && set_status !== '') progress = STATUS_PROGRESS[set_status]
+    if (progress !== null) shipment.progress_percentage = progress
+
     await shipment.save()
-    await audit(req.admin, 'checkpoint.created', 'shipment', String(shipment._id), `${shipment.tracking_number}: checkpoint at ${location}`)
+    const extras = [
+      statusChanged ? `status → ${set_status}` : null,
+      progress !== null ? `progress → ${progress}%` : null,
+    ].filter(Boolean).join(', ')
+    await audit(req.admin, 'checkpoint.created', 'shipment', String(shipment._id), `${shipment.tracking_number}: checkpoint at ${location}${extras ? ` (${extras})` : ''}`)
     res.status(201).json({ shipment: withTimeline(shipment) })
   } catch (e) {
     res.status(400).json({ error: e.message })

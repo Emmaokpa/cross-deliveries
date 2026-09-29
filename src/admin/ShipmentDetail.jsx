@@ -5,6 +5,9 @@ import { Badge, Field, Modal, Progress, fmtMoney, fmtDate, useToast } from './co
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
+// Mirror of the backend STATUS_PROGRESS presets — shown as hints in forms
+const STATUS_DEFAULTS = Object.fromEntries(STATUSES.map((s, i) => [s, [5, 20, 45, 60, 85, 100, 50][i]]))
+
 export default function ShipmentDetail() {
   const { id } = useParams()
   const { admin } = useOutletContext()
@@ -12,11 +15,11 @@ export default function ShipmentDetail() {
   const [shipment, setShipment] = useState(null)
   const [error, setError] = useState('')
 
-  const [statusForm, setStatusForm] = useState({ status: 'Shipped', location: '', notes: '', backdated_timestamp: '', trigger_email: true })
+  const [statusForm, setStatusForm] = useState({ status: 'Shipped', location: '', notes: '', backdated_timestamp: '', trigger_email: true, progress_percentage: '' })
   const [busy, setBusy] = useState(false)
 
   const [cpModal, setCpModal] = useState(null) // null | {mode:'add'} | {mode:'edit', cp}
-  const [cpForm, setCpForm] = useState({ timestamp: '', location: '', status_tag: '', admin_notes: '' })
+  const [cpForm, setCpForm] = useState({ timestamp: '', location: '', status_tag: '', admin_notes: '', set_status: '', progress_percentage: '' })
 
   const load = () => {
     api(`/v1/shipments/${id}`)
@@ -36,14 +39,17 @@ export default function ShipmentDetail() {
     try {
       const body = { ...statusForm }
       if (!body.backdated_timestamp) delete body.backdated_timestamp
+      if (body.progress_percentage === '') delete body.progress_percentage
       const data = await api(`/v1/shipments/${s.id}/status`, { method: 'PATCH', body })
       setShipment(data.shipment)
       toast(
-        data.email?.simulated
-          ? `Status set to ${body.status}. Email simulated (no Brevo key).`
-          : data.email?.queued
-            ? `Status set to ${body.status}. Email queued via Brevo.`
-            : `Status set to ${body.status}.`,
+        `Status set to ${body.status} (${data.shipment.progress_percentage}%).${
+          data.email?.simulated
+            ? ' Email simulated (no Brevo key).'
+            : data.email?.queued
+              ? ' Email queued via Brevo.'
+              : ''
+        }`,
         'ok',
       )
     } catch (err) {
@@ -74,7 +80,7 @@ export default function ShipmentDetail() {
   }
 
   const openCpAdd = () => {
-    setCpForm({ timestamp: '', location: '', status_tag: s.current_status, admin_notes: '' })
+    setCpForm({ timestamp: '', location: '', status_tag: s.current_status, admin_notes: '', set_status: '', progress_percentage: '' })
     setCpModal({ mode: 'add' })
   }
 
@@ -84,6 +90,8 @@ export default function ShipmentDetail() {
       location: cp.location,
       status_tag: cp.status_tag,
       admin_notes: cp.admin_notes || '',
+      set_status: '',
+      progress_percentage: '',
     })
     setCpModal({ mode: 'edit', cp })
   }
@@ -93,9 +101,16 @@ export default function ShipmentDetail() {
     try {
       const body = { ...cpForm }
       if (!body.timestamp) delete body.timestamp
+      if (!body.set_status) delete body.set_status
+      if (body.progress_percentage === '') delete body.progress_percentage
       if (cpModal.mode === 'add') {
         await api(`/v1/shipments/${s.id}/checkpoints`, { method: 'POST', body })
-        toast('Checkpoint added to timeline.', 'ok')
+        toast(
+          body.set_status || body.progress_percentage !== undefined
+            ? 'Checkpoint added — journey & progress updated.'
+            : 'Checkpoint added to timeline.',
+          'ok',
+        )
       } else {
         await api(`/v1/shipments/${s.id}/checkpoints/${cpModal.cp.id}`, { method: 'PATCH', body })
         toast('Checkpoint updated.', 'ok')
@@ -161,6 +176,16 @@ export default function ShipmentDetail() {
                   </select>
                 </Field>
                 <Field label="Location"><input value={statusForm.location} onChange={(e) => setStatusForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Istanbul Hub" /></Field>
+                <Field label="Progress % (optional)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={statusForm.progress_percentage}
+                    onChange={(e) => setStatusForm((f) => ({ ...f, progress_percentage: e.target.value }))}
+                    placeholder={`default ${STATUS_DEFAULTS[statusForm.status] ?? '—'}%`}
+                  />
+                </Field>
                 <Field label="Backdate (optional)"><input type="datetime-local" value={statusForm.backdated_timestamp} onChange={(e) => setStatusForm((f) => ({ ...f, backdated_timestamp: e.target.value }))} /></Field>
                 <Field label="Trigger email">
                   <select value={statusForm.trigger_email ? 'yes' : 'no'} onChange={(e) => setStatusForm((f) => ({ ...f, trigger_email: e.target.value === 'yes' }))}>
@@ -219,6 +244,26 @@ export default function ShipmentDetail() {
               <Field label="Location" required><input value={cpForm.location} onChange={(e) => setCpForm((f) => ({ ...f, location: e.target.value }))} required /></Field>
               <Field label="Status tag" required><input value={cpForm.status_tag} onChange={(e) => setCpForm((f) => ({ ...f, status_tag: e.target.value }))} required /></Field>
               <Field label="Admin notes"><input value={cpForm.admin_notes} onChange={(e) => setCpForm((f) => ({ ...f, admin_notes: e.target.value }))} /></Field>
+              {cpModal.mode === 'add' && (
+                <>
+                  <Field label="Move status to">
+                    <select value={cpForm.set_status} onChange={(e) => setCpForm((f) => ({ ...f, set_status: e.target.value }))}>
+                      <option value="">— keep current —</option>
+                      {STATUSES.map((x) => <option key={x}>{x}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Set progress %">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={cpForm.progress_percentage}
+                      onChange={(e) => setCpForm((f) => ({ ...f, progress_percentage: e.target.value }))}
+                      placeholder="keep current"
+                    />
+                  </Field>
+                </>
+              )}
             </div>
           </form>
         </Modal>
