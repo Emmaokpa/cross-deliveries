@@ -317,15 +317,24 @@ function smtpConfigured() {
   return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS)
 }
 
-// Tries SMTP_PORT first, then Brevo's alternates (2525, 465).
+// Remembers which SMTP port worked so later sends skip dead ports
+let lastGoodPort = null
+
+// Tries the last working port first, then SMTP_PORT, then Brevo's alternates (2525, 465).
 // Throws the last error if every port fails.
 async function sendViaSmtp(mailOptions) {
   const { SMTP_PORT } = process.env
-  const ports = [...new Set([Number(SMTP_PORT) || 587, 2525, 465])]
+  const ports = [...new Set([
+    ...(lastGoodPort ? [lastGoodPort] : []),
+    Number(SMTP_PORT) || 587,
+    2525,
+    465,
+  ])]
   let lastErr
   for (const port of ports) {
     try {
       await buildSmtpTransport(port).sendMail(mailOptions)
+      lastGoodPort = port
       return { port }
     } catch (err) {
       lastErr = err
