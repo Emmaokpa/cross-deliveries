@@ -65,6 +65,13 @@ const shipmentSchema = new Schema(
     progress_percentage: { type: Number, min: 0, max: 100, default: 0 },
     estimated_delivery: { type: Date, default: null },
     email_sent_at: { type: Date, default: null },
+    delivered_at: { type: Date, default: null },
+    pod: {
+      receiver_name: { type: String, default: '' },
+      signature: { type: String, default: '' }, // data URL PNG from the signature pad
+      signed_at: { type: Date, default: null },
+      recorded_by: { type: String, default: '' }, // admin email
+    },
     checkpoints: { type: [checkpointSchema], default: [] },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },

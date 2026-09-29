@@ -92,6 +92,27 @@ export default function TrackForm() {
               style={{ width: `${result.progress_percentage}%` }}
             />
           </div>
+          {result.current_status === 'Delivered' && (
+            <div className="mt-4 rounded-sm border-2 border-[#0E7A3D] bg-[#E9F6EE] px-4 py-3 text-center">
+              <p className="font-heading text-lg font-bold text-[#0E6B39]">✓ DELIVERED</p>
+              {result.delivered_at && (
+                <p className="text-[13px] text-[#2F6B4C]">
+                  {new Date(result.delivered_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                </p>
+              )}
+              {result.pod?.receiver_name && (
+                <p className="mt-1 text-[13px] text-[#2F6B4C]">
+                  Received by <strong>{result.pod.receiver_name}</strong>
+                </p>
+              )}
+            </div>
+          )}
+          {result.estimated_delivery && result.current_status !== 'Delivered' && (
+            <p className="mt-3 rounded-sm bg-[#f2f7f3] px-3 py-2 text-[13.5px] text-[#0E6B39]">
+              Estimated delivery:{' '}
+              <strong>{new Date(result.estimated_delivery).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</strong>
+            </p>
+          )}
           <p className="mt-2">
             <strong className="text-black">Route:</strong> {result.origin_city || '—'} →{' '}
             {result.destination_city || '—'} • <strong className="text-black">Service:</strong>{' '}

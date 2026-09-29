@@ -36,6 +36,28 @@ function renderTemplate(shipment) {
   const paid = shipment.payment_status === 'Paid'
   const payColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : BRAND_RED
   const payLabel = paid ? 'PAID' : (shipment.payment_status || 'UNPAID').toUpperCase()
+  const isDelivered = shipment.current_status === 'Delivered'
+  const deliveredOn = fmtDate(shipment.delivered_at)
+  const receivedBy = shipment.pod?.receiver_name
+
+  // Delivered: green confirmation banner with proof of delivery
+  const deliveredBlock = isDelivered
+    ? `
+          <!-- ═══ Delivered banner ═══ -->
+          <tr>
+            <td style="padding:14px 34px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E9F6EE;border:2px solid #0E7A3D;border-radius:10px;">
+                <tr>
+                  <td style="padding:16px 18px;text-align:center;">
+                    <div style="font-size:15px;font-weight:bold;color:#0E6B39;">&#10004; DELIVERED${deliveredOn ? ` — ${deliveredOn}` : ''}</div>
+                    ${receivedBy ? `<div style="font-size:12.5px;color:#2F6B4C;margin-top:5px;">Received by <strong>${escapeHtml(receivedBy)}</strong>${shipment.pod?.signed_at ? ' &bull; ' + fmtDate(shipment.pod.signed_at) : ''}</div>` : ''}
+                    <div style="font-size:11.5px;color:#6B8F7C;margin-top:4px;">Proof of delivery is on record with our operations team.</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>`
+    : ''
 
   const costRows = [
     ['Base Freight Charges', fmt(shipment.base_freight, cur)],
@@ -145,7 +167,8 @@ function renderTemplate(shipment) {
             </td>
           </tr>
 
-          ${eta
+          ${deliveredBlock}
+          ${!isDelivered && eta
             ? `<!-- ═══ ETA banner ═══ -->
           <tr>
             <td style="padding:14px 34px 0;">

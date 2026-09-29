@@ -169,7 +169,16 @@ router.patch('/shipments/:id', async (req, res) => {
       })
     }
     if (touch.status) shipment.current_status = touch.status
-    if (touch.progress !== undefined) shipment.progress_percentage = touch.progress
+    if (touch.progress !== undefined) {
+      // Delivery rules: Delivered pins the bar at 100%; reopening clears the stamp.
+      shipment.progress_percentage = shipment.current_status === 'Delivered' ? 100 : touch.progress
+    }
+    if (shipment.current_status === 'Delivered') {
+      shipment.progress_percentage = 100
+      if (!shipment.delivered_at) shipment.delivered_at = new Date()
+    } else if (touch.status && shipment.delivered_at) {
+      shipment.delivered_at = null
+    }
 
     const nothingToDo = !hasConsign && !touch.status && touch.progress === undefined
     if (nothingToDo) return res.status(400).json({ error: 'No editable fields provided' })
@@ -209,6 +218,15 @@ router.patch('/shipments/:id/status', async (req, res) => {
       progress = Math.round(p)
     }
 
+    // ── Delivery consistency rules ──
+    // Delivered ⇒ progress locked to 100% & delivered_at stamped; reopening clears it.
+    if (status === 'Delivered') {
+      progress = 100
+      if (!shipment.delivered_at) shipment.delivered_at = ts
+    } else if (shipment.delivered_at) {
+      shipment.delivered_at = null // reopening a delivered shipment un-locks the bar
+    }
+
     shipment.current_status = status
     shipment.progress_percentage = progress
     shipment.checkpoints.push({
@@ -222,7 +240,7 @@ router.patch('/shipments/:id/status', async (req, res) => {
     await audit(req.admin, 'shipment.status_changed', 'shipment', String(shipment._id), `${shipment.tracking_number}: → ${status}`)
 
     let emailResult = null
-    const emailTriggered = trigger_email === true || (trigger_email === undefined && ['Shipped', 'Out for Delivery'].includes(status))
+    const emailTriggered = trigger_email === true || (trigger_email === undefined && ['Shipped', 'Out for Delivery', 'Delivered'].includes(status))
     if (emailTriggered) {
       emailResult = sendShipmentEmail(shipment, req.admin)
     }
@@ -320,6 +338,82 @@ router.delete('/shipments/:id/checkpoints/:cpId', async (req, res) => {
     cp.deleteOne()
     await shipment.save()
     await audit(req.admin, 'checkpoint.deleted', 'shipment', String(shipment._id), `Deleted checkpoint at ${cp.location}`)
+    res.json({ shipment: withTimeline(shipment) })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// --- Proof of Delivery (POD) ---
+
+// GET /api/v1/shipments/:id/pod
+router.get('/shipments/:id/pod', async (req, res) => {
+  const shipment = await getShipment(req.params.id)
+  if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+  res.json({ pod: shipment.pod || {}, delivered_at: shipment.delivered_at, current_status: shipment.current_status })
+})
+
+// POST /api/v1/shipments/:id/pod — record delivery proof (receiver name + signature)
+// Body: { receiver_name, signature (data URL PNG), delivered_at? }
+// Marks the shipment Delivered (locks 100%), stamps delivered_at, emails the customer.
+router.post('/shipments/:id/pod', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const { receiver_name, signature, delivered_at } = req.body || {}
+    if (!receiver_name || !String(receiver_name).trim()) {
+      return res.status(400).json({ error: 'receiver_name is required' })
+    }
+    const sig = String(signature || '')
+    if (!sig.startsWith('data:image/png;base64,')) {
+      return res.status(400).json({ sizeHint: sig.length, error: 'signature must be a PNG data URL (data:image/png;base64,…)' })
+    }
+    if (sig.length > 400_000) {
+      return res.status(400).json({ error: 'signature image too large (max ~400KB)' })
+    }
+
+    const ts = delivered_at ? new Date(delivered_at) : new Date()
+    if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid delivered_at' })
+
+    shipment.pod = {
+      receiver_name: String(receiver_name).trim(),
+      signature: sig,
+      signed_at: ts,
+      recorded_by: req.admin?.email || 'system',
+    }
+    shipment.current_status = 'Delivered'
+    shipment.progress_percentage = 100
+    if (!shipment.delivered_at) shipment.delivered_at = ts
+    shipment.checkpoints.push({
+      id: crypto.randomUUID(),
+      timestamp: ts,
+      location: shipment.destination_city || shipment.recipient_city || 'Delivery address',
+      status_tag: 'Delivered',
+      admin_notes: `Received by ${shipment.pod.receiver_name}`,
+    })
+    await shipment.save()
+    await audit(req.admin, 'shipment.delivered', 'shipment', String(shipment._id), `${shipment.tracking_number}: POD recorded, received by ${shipment.pod.receiver_name}`)
+
+    const emailResult = await sendShipmentEmail(shipment, req.admin)
+    res.json({ shipment: withTimeline(shipment), email: emailResult })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// DELETE /api/v1/shipments/:id/pod — reopen shipment (clears POD, un-locks bar)
+router.delete('/shipments/:id/pod', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    shipment.pod = { receiver_name: '', signature: '', signed_at: null, recorded_by: '' }
+    shipment.delivered_at = null
+    if (shipment.current_status === 'Delivered') {
+      shipment.current_status = 'Out for Delivery'
+      shipment.progress_percentage = STATUS_PROGRESS['Out for Delivery']
+    }
+    await shipment.save()
+    await audit(req.admin, 'shipment.pod_cleared', 'shipment', String(shipment._id), `${shipment.tracking_number}: POD cleared, shipment reopened`)
     res.json({ shipment: withTimeline(shipment) })
   } catch (e) {
     res.status(500).json({ error: e.message })

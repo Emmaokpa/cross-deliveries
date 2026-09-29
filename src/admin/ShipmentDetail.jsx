@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { api, downloadBlob } from './api.js'
 import { Badge, Field, Modal, Progress, fmtMoney, fmtDate, useToast } from './components.jsx'
@@ -9,6 +9,81 @@ const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out fo
 
 // Mirror of the backend STATUS_PROGRESS presets — shown as hints in forms
 const STATUS_DEFAULTS = Object.fromEntries(STATUSES.map((s, i) => [s, [5, 20, 45, 60, 85, 100, 50][i]]))
+
+// Signature pad: draws with mouse/touch onto a canvas, exports PNG data URL
+function SignaturePad({ onChange }) {
+  const ref = useRef(null)
+  const drawing = useRef(false)
+  const [isEmpty, setIsEmpty] = useState(true)
+
+  useEffect(() => {
+    const canvas = ref.current
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.lineWidth = 2.4
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = '#031435'
+  }, [])
+
+  const pos = (e) => {
+    const r = ref.current.getBoundingClientRect()
+    return { x: (e.clientX - r.left) * (ref.current.width / r.width), y: (e.clientY - r.top) * (ref.current.height / r.height) }
+  }
+  const start = (e) => {
+    e.preventDefault()
+    drawing.current = true
+    const ctx = ref.current.getContext('2d')
+    const p = pos(e)
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+  }
+  const move = (e) => {
+    if (!drawing.current) return
+    e.preventDefault()
+    const ctx = ref.current.getContext('2d')
+    const p = pos(e)
+    ctx.lineTo(p.x, p.y)
+    ctx.stroke()
+    setIsEmpty(false)
+  }
+  const end = () => {
+    if (!drawing.current) return
+    drawing.current = false
+    onChange(ref.current.toDataURL('image/png'), isEmpty)
+  }
+  const clear = () => {
+    const canvas = ref.current
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    setIsEmpty(true)
+    onChange(null, true)
+  }
+
+  return (
+    <div>
+      <canvas
+        ref={ref}
+        width={480}
+        height={150}
+        style={{ width: '100%', maxWidth: 480, border: '1px solid #e4e8f0', borderRadius: 10, touchAction: 'none', cursor: 'crosshair', background: '#fff' }}
+        onMouseDown={start}
+        onMouseMove={move}
+        onMouseUp={end}
+        onMouseLeave={end}
+        onTouchStart={start}
+        onTouchMove={move}
+        onTouchEnd={end}
+      />
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={clear}>Clear signature</button>
+        <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'center' }}>{isEmpty ? 'Draw the receiver\u2019s signature above' : 'Signature captured'}</span>
+      </div>
+    </div>
+  )
+}
 
 // Drag / type / nudge the progress bar, then save to the API
 function ProgressEditor({ value, busy, onSave }) {
@@ -78,6 +153,10 @@ export default function ShipmentDetail() {
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [editBusy, setEditBusy] = useState(false)
+  const [podName, setPodName] = useState('')
+  const [podSig, setPodSig] = useState(null)
+  const [podEmpty, setPodEmpty] = useState(true)
+  const [podBusy, setPodBusy] = useState(false)
 
   const load = () => {
     api(`/v1/shipments/${id}`)
@@ -186,6 +265,39 @@ export default function ShipmentDetail() {
       await api(`/v1/shipments/${s.id}/checkpoints/${cp.id}`, { method: 'DELETE' })
       toast('Checkpoint deleted.', 'ok')
       load()
+    } catch (err) {
+      toast(err.message, 'err')
+    }
+  }
+
+  const recordPod = async (e) => {
+    e.preventDefault()
+    if (!podName.trim()) return toast('Enter the receiver\u2019s name.', 'err')
+    if (podEmpty || !podSig) return toast('Capture the signature on the pad.', 'err')
+    setPodBusy(true)
+    try {
+      const data = await api(`/v1/shipments/${s.id}/pod`, {
+        method: 'POST',
+        body: { receiver_name: podName, signature: podSig },
+      })
+      setShipment(data.shipment)
+      setPodName('')
+      setPodSig(null)
+      setPodEmpty(true)
+      toast(data.email?.simulated ? 'Delivery recorded. Email simulated (no SMTP).' : 'Delivery recorded — confirmation email sent.', 'ok')
+    } catch (err) {
+      toast(err.message, 'err')
+    } finally {
+      setPodBusy(false)
+    }
+  }
+
+  const reopenFromPod = async () => {
+    if (!confirm('Clear proof of delivery and reopen this shipment?')) return
+    try {
+      const data = await api(`/v1/shipments/${s.id}/pod`, { method: 'DELETE' })
+      setShipment(data.shipment)
+      toast('POD cleared — shipment reopened.', 'ok')
     } catch (err) {
       toast(err.message, 'err')
     }
@@ -391,6 +503,63 @@ export default function ShipmentDetail() {
               </div>
               <button className="btn-a btn-primary-a" disabled={busy}>{busy ? 'Updating…' : 'Apply Status Update'}</button>
             </form>
+          </div>
+
+          <div className="a-card a-card-pad">
+            <h3 style={{ margin: '0 0 12px', color: 'var(--a-navy)' }}>Proof of Delivery</h3>
+            {s.pod?.receiver_name ? (
+              <div>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: '#e9f6ee',
+                    border: '1px solid #86dfa8',
+                    color: '#15803d',
+                    fontWeight: 600,
+                    borderRadius: 999,
+                    padding: '6px 14px',
+                    fontSize: 13.5,
+                  }}
+                >
+                  ✓ Delivered — received by {s.pod.receiver_name}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <img
+                    src={s.pod.signature}
+                    alt={`Signature of ${s.pod.receiver_name}`}
+                    style={{ maxWidth: 320, width: '100%', border: '1px solid #e4e8f0', borderRadius: 8, background: '#fff' }}
+                  />
+                </div>
+                <div className="kv-list" style={{ marginTop: 10 }}>
+                  <div className="kv"><span className="k">Signed at</span><span className="v">{s.pod.signed_at ? fmtDate(s.pod.signed_at) : '—'}</span></div>
+                  <div className="kv"><span className="k">Delivered at</span><span className="v">{s.delivered_at ? fmtDate(s.delivered_at) : '—'}</span></div>
+                  <div className="kv"><span className="k">Recorded by</span><span className="v">{s.pod.recorded_by || '—'}</span></div>
+                </div>
+                <button className="btn-a btn-danger-a btn-sm-a" style={{ marginTop: 12 }} onClick={reopenFromPod}>
+                  Clear POD & Reopen Shipment
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={recordPod}>
+                <p style={{ margin: '0 0 12px', fontSize: 13.5, color: '#6b7280' }}>
+                  Record who received the package. This marks the shipment <strong>Delivered</strong>, locks progress at 100%,
+                  emails the customer a delivery confirmation, and shows the receiver's name on the public tracking page.
+                </p>
+                <div className="form-grid">
+                  <Field label="Receiver name" required>
+                    <input value={podName} onChange={(e) => setPodName(e.target.value)} placeholder="e.g. Chidi Okonkwo" />
+                  </Field>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <SignaturePad onChange={(dataUrl, empty) => { setPodSig(dataUrl); setPodEmpty(empty) }} />
+                </div>
+                <button className="btn-a btn-primary-a" style={{ marginTop: 12 }} disabled={podBusy}>
+                  {podBusy ? 'Recording…' : '✓ Record Delivery & Email Customer'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
 
