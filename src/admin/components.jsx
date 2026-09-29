@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useState } from 'react'
+import { formatMoney } from './currencies.js'
 
 // ---------- Toasts ----------
 const ToastCtx = createContext(() => {})
@@ -83,8 +84,8 @@ export function EmptyState({ icon = '📦', title, hint }) {
   )
 }
 
-export function fmtMoney(n) {
-  return `₦${Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+export function fmtMoney(n, currency = 'NGN') {
+  return formatMoney(n, currency)
 }
 
 export function fmtDate(iso) {

@@ -3,11 +3,58 @@ import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { api, downloadBlob } from './api.js'
 import { Badge, Field, Modal, Progress, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
+import { CURRENCIES } from './currencies.js'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
 // Mirror of the backend STATUS_PROGRESS presets — shown as hints in forms
 const STATUS_DEFAULTS = Object.fromEntries(STATUSES.map((s, i) => [s, [5, 20, 45, 60, 85, 100, 50][i]]))
+
+// Drag / type / nudge the progress bar, then save to the API
+function ProgressEditor({ value, busy, onSave }) {
+  const [draft, setDraft] = useState(value ?? 0)
+  useEffect(() => setDraft(value ?? 0), [value])
+  const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)))
+  const shown = clamp(draft)
+  const dirty = shown !== (value ?? 0)
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value={shown}
+          onChange={(e) => setDraft(e.target.value)}
+          aria-label="Progress percentage slider"
+          style={{ flex: '1 1 170px', accentColor: 'var(--a-red)', cursor: 'pointer' }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={() => setDraft(shown - 1)} aria-label="Decrease 1%">−</button>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-label="Progress percentage"
+            style={{ width: 72, textAlign: 'center', padding: '6px 8px', border: '1px solid #e4e8f0', borderRadius: 8 }}
+          />
+          <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={() => setDraft(shown + 1)} aria-label="Increase 1%">＋</button>
+          <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
+        </div>
+        <button type="button" className="btn-a btn-primary-a btn-sm-a" disabled={!dirty || busy} onClick={() => onSave(shown)}>
+          {busy ? 'Saving…' : dirty ? 'Update Progress' : 'Saved ✓'}
+        </button>
+      </div>
+      <div className="progress-track" style={{ marginTop: 10 }}>
+        <div className="progress-fill" style={{ width: `${shown}%`, transition: 'width 0.25s ease' }} />
+      </div>
+    </div>
+  )
+}
 
 export default function ShipmentDetail() {
   const { id } = useParams()
@@ -25,6 +72,9 @@ export default function ShipmentDetail() {
   const [etaEdit, setEtaEdit] = useState(false)
   const [etaValue, setEtaValue] = useState('')
   const [etaBusy, setEtaBusy] = useState(false)
+  const [progressBusy, setProgressBusy] = useState(false)
+  const [curEdit, setCurEdit] = useState(false)
+  const [curValue, setCurValue] = useState('')
 
   const load = () => {
     api(`/v1/shipments/${id}`)
@@ -138,6 +188,36 @@ export default function ShipmentDetail() {
     }
   }
 
+  const saveProgress = async (pct) => {
+    setProgressBusy(true)
+    try {
+      const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body: { progress_percentage: pct } })
+      setShipment(data.shipment)
+      toast(`Progress set to ${data.shipment.progress_percentage}%.`, 'ok')
+    } catch (err) {
+      toast(err.message, 'err')
+    } finally {
+      setProgressBusy(false)
+    }
+  }
+
+  const openCurEdit = () => {
+    setCurValue(s.currency || 'NGN')
+    setCurEdit(true)
+  }
+
+  const saveCurrency = async (e) => {
+    e.preventDefault()
+    try {
+      const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body: { currency: curValue } })
+      setShipment(data.shipment)
+      setCurEdit(false)
+      toast('Currency updated.', 'ok')
+    } catch (err) {
+      toast(err.message, 'err')
+    }
+  }
+
   const openEtaEdit = () => {
     setEtaValue(s.estimated_delivery ? new Date(s.estimated_delivery).toISOString().slice(0, 16) : '')
     setEtaEdit(true)
@@ -176,8 +256,29 @@ export default function ShipmentDetail() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="a-card a-card-pad">
             <h3 style={{ margin: '0 0 6px', color: 'var(--a-navy)' }}>Consignment Overview</h3>
-            <Progress value={s.progress_percentage} />
+            <ProgressEditor value={s.progress_percentage} busy={progressBusy} onSave={saveProgress} />
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {curEdit ? (
+                <form onSubmit={saveCurrency} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 13, color: '#6b7280' }}>Currency:</label>
+                  <select value={curValue} onChange={(e) => setCurValue(e.target.value)} autoFocus style={{ padding: '5px 8px', border: '1px solid #e4e8f0', borderRadius: 8 }}>
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.country} — {c.code} ({c.symbol})</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="btn-a btn-primary-a btn-sm-a">Save</button>
+                  <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={() => setCurEdit(false)}>Cancel</button>
+                </form>
+              ) : (
+                <>
+                  <span style={{ fontSize: 13.5, color: '#374151' }}>
+                    Currency: <strong>{s.currency || 'NGN'}</strong>
+                  </span>
+                  <button className="btn-a btn-ghost-a btn-sm-a" onClick={openCurEdit}>Edit</button>
+                </>
+              )}
+            </div>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {etaEdit ? (
                 <form onSubmit={saveEta} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <label style={{ fontSize: 13, color: '#6b7280' }}>Estimated delivery:</label>
@@ -206,10 +307,10 @@ export default function ShipmentDetail() {
               <div className="kv"><span className="k">Delivery address</span><span className="v">{s.recipient_address || '—'}, {s.recipient_city} {s.recipient_country}</span></div>
               <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • {s.package_weight} kg • {s.package_dimensions || '—'} • ×{s.package_quantity}</span></div>
               <div className="kv"><span className="k">Description</span><span className="v">{s.package_description || '—'}</span></div>
-              <div className="kv"><span className="k">Base freight</span><span className="v">{fmtMoney(s.base_freight)}</span></div>
-              <div className="kv"><span className="k">Fuel surcharge</span><span className="v">{fmtMoney(s.surcharge_fuel)}</span></div>
-              <div className="kv"><span className="k">Customs & handling</span><span className="v">{fmtMoney(s.surcharge_customs)}</span></div>
-              <div className="kv"><span className="k">Total</span><span className="v" style={{ fontWeight: 700 }}>{fmtMoney(s.total_cost)}</span></div>
+              <div className="kv"><span className="k">Base freight</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
+              <div className="kv"><span className="k">Fuel surcharge</span><span className="v">{fmtMoney(s.surcharge_fuel, s.currency)}</span></div>
+              <div className="kv"><span className="k">Customs & handling</span><span className="v">{fmtMoney(s.surcharge_customs, s.currency)}</span></div>
+              <div className="kv"><span className="k">Total</span><span className="v" style={{ fontWeight: 700 }}>{fmtMoney(s.total_cost, s.currency)}</span></div>
               <div className="kv"><span className="k">Payment</span><span className="v"><Badge value={s.payment_status} /></span></div>
               <div className="kv"><span className="k">Last email sent</span><span className="v">{s.email_sent_at ? fmtDate(s.email_sent_at) : 'Never'}</span></div>
             </div>

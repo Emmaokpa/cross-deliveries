@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
+import { CURRENCIES } from './services/currency.js'
 
 const { Schema, model, Types } = mongoose
 
@@ -54,6 +55,7 @@ const shipmentSchema = new Schema(
     surcharge_fuel: { type: Number, default: 0 },
     surcharge_customs: { type: Number, default: 0 },
     total_cost: { type: Number, default: 0 },
+    currency: { type: String, enum: CURRENCIES.map((c) => c.code), default: 'NGN' },
     payment_status: { type: String, enum: ['Paid', 'Unpaid', 'Pending'], default: 'Unpaid' },
     current_status: {
       type: String,

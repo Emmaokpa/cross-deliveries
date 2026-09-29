@@ -6,10 +6,17 @@ import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 const BRAND_RED = '#E30613'
 const NAVY = '#031435'
 const GREY = '#6B7280'
-const CURRENCY = 'NGN'
 
-// Naira amounts — Helvetica (PDF core font) has no ₦ glyph, so use the ISO code.
-const money = (n) => `NGN ${Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+// PDF core fonts (Helvetica) lack most currency glyphs (₦, ₩, ₹…), so amounts
+// always print with the ISO code prefix, e.g. "NGN 12,500.00" / "KRW 1,250,000".
+const money = (n, code = 'NGN') => {
+  const zeroDecimals = code === 'JPY' || code === 'KRW'
+  const num = Number(n || 0)
+  return `${String(code).toUpperCase()} ${num.toLocaleString('en-US', {
+    minimumFractionDigits: zeroDecimals ? 0 : 2,
+    maximumFractionDigits: zeroDecimals ? 0 : 2,
+  })}`
+}
 
 export function buildInvoicePdf(shipment) {
   const doc = new PDFDocument({ size: 'A4', margin: 48 })
@@ -142,11 +149,12 @@ function metaGrid(doc, shipment) {
 function pricingTable(doc, shipment) {
   const x0 = 48
   const width = doc.page.width - 96
+  const cur = (shipment.currency || 'NGN').toUpperCase()
   doc.moveDown(1)
   doc.rect(x0, doc.y, width, 22).fill(NAVY)
   doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(9)
   doc.text('DESCRIPTION', x0 + 12, doc.y + 7)
-  doc.text(`AMOUNT (${CURRENCY})`, x0 + width - 110, doc.y + 7, { width: 98, align: 'right' })
+  doc.text(`AMOUNT (${cur})`, x0 + width - 110, doc.y + 7, { width: 98, align: 'right' })
   doc.y += 22
 
   const rows = [
@@ -158,14 +166,14 @@ function pricingTable(doc, shipment) {
   rows.forEach(([label, amount], i) => {
     if (i % 2 === 0) doc.rect(x0, doc.y, width, 20).fill('#F6F7F9')
     doc.fillColor('#111827').text(label, x0 + 12, doc.y + 6)
-    doc.text(money(amount), x0 + width - 110, doc.y + 6, { width: 98, align: 'right' })
+    doc.text(money(amount, cur), x0 + width - 110, doc.y + 6, { width: 98, align: 'right' })
     doc.y += 20
   })
 
   doc.rect(x0, doc.y, width, 24).fill('#EDEFF3')
   doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(10.5)
   doc.text('TOTAL COST', x0 + 12, doc.y + 7)
-  doc.text(money(shipment.total_cost || 0), x0 + width - 110, doc.y + 7, { width: 98, align: 'right' })
+  doc.text(money(shipment.total_cost || 0, cur), x0 + width - 110, doc.y + 7, { width: 98, align: 'right' })
   doc.y += 30
 
   // Payment status banner

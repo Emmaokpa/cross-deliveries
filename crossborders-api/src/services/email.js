@@ -4,22 +4,24 @@ import { Shipment } from '../db.js'
 import { audit } from '../routes/auth.js'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 import { buildInvoicePdf } from './pdf.js'
+import { format as fmtMoney } from './currency.js'
 
 const LOGO_CID = 'cbd-logo'
 
 const BRAND_RED = '#E30613'
 const NAVY = '#031435'
 
-function fmt(n) {
-  return `₦${Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+function fmt(n, code) {
+  return fmtMoney(n, code)
 }
 
 function renderTemplate(shipment) {
   const trackUrl = TRACKING_URL(shipment.tracking_number)
+  const cur = shipment.currency || 'NGN'
   const rows = [
-    ['Base Freight Charges', fmt(shipment.base_freight)],
-    ['Fuel Surcharge', fmt(shipment.surcharge_fuel)],
-    ['Customs & Handling', fmt(shipment.surcharge_customs)],
+    ['Base Freight Charges', fmt(shipment.base_freight, cur)],
+    ['Fuel Surcharge', fmt(shipment.surcharge_fuel, cur)],
+    ['Customs & Handling', fmt(shipment.surcharge_customs, cur)],
   ]
   const rowHtml = rows
     .map(
@@ -145,7 +147,7 @@ export function fillTemplate(shipment) {
     .replaceAll('{{origin_city}}', escapeHtml(shipment.origin_city || '—'))
     .replaceAll('{{destination_city}}', escapeHtml(shipment.destination_city || '—'))
     .replaceAll('{{progress_percentage}}', String(shipment.progress_percentage ?? 0))
-    .replaceAll('{{total_cost}}', fmt(shipment.total_cost))
+    .replaceAll('{{total_cost}}', fmt(shipment.total_cost, shipment.currency || 'NGN'))
     .replaceAll('{{tracking_url}}', TRACKING_URL(shipment.tracking_number))
 }
 

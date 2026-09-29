@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from './api.js'
 import { Badge, Field, Modal, Progress, EmptyState, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
+import { CURRENCIES } from './currencies.js'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
@@ -11,7 +12,7 @@ const EMPTY_FORM = {
   recipient_name: '', recipient_email: '', recipient_phone: '', recipient_address: '',
   recipient_city: '', recipient_country: '', origin_city: '', destination_city: '',
   cargo_type: 'Air', package_weight: '', package_dimensions: '', package_quantity: 1, package_description: '',
-  base_freight: '', surcharge_fuel: '', surcharge_customs: '', payment_status: 'Unpaid',
+  base_freight: '', surcharge_fuel: '', surcharge_customs: '', payment_status: 'Unpaid', currency: 'NGN',
 }
 
 export default function Shipments() {
@@ -102,7 +103,7 @@ export default function Shipments() {
                   </td>
                   <td data-label="Route" style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
                   <td data-label="Cargo">{s.cargo_type}</td>
-                  <td data-label="Total" style={{ fontWeight: 600 }}>{fmtMoney(s.total_cost)}</td>
+                  <td data-label="Total" style={{ fontWeight: 600 }}>{fmtMoney(s.total_cost, s.currency)}</td>
                   <td data-label="Payment"><Badge value={s.payment_status} /></td>
                   <td data-label="Status"><Badge value={s.current_status} /></td>
                   <td data-label="Progress"><Progress value={s.progress_percentage} /></td>
@@ -172,6 +173,13 @@ export default function Shipments() {
               <Field label="Payment status">
                 <select value={form.payment_status} onChange={setF('payment_status')}>
                   <option>Unpaid</option><option>Paid</option><option>Pending</option>
+                </select>
+              </Field>
+              <Field label="Currency">
+                <select value={form.currency} onChange={setF('currency')}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.country} — {c.code} ({c.symbol})</option>
+                  ))}
                 </select>
               </Field>
             </div>

@@ -4,6 +4,7 @@ import { audit, authRequired } from './auth.js'
 import { STATUS_PROGRESS, TRACKING_URL, generateTrackingNumber, computeFinancials } from '../services/shipment-utils.js'
 import { buildInvoicePdf } from '../services/pdf.js'
 import { sendShipmentEmail } from '../services/email.js'
+import { isValidCurrency } from '../services/currency.js'
 
 const router = Router()
 router.use(authRequired)
@@ -13,7 +14,7 @@ const SHIPMENT_FIELDS = [
   'recipient_name', 'recipient_email', 'recipient_phone', 'recipient_address',
   'recipient_city', 'recipient_country', 'origin_city', 'destination_city',
   'cargo_type', 'package_weight', 'package_dimensions', 'package_quantity', 'package_description',
-  'base_freight', 'surcharge_fuel', 'surcharge_customs', 'payment_status', 'estimated_delivery',
+  'base_freight', 'surcharge_fuel', 'surcharge_customs', 'payment_status', 'estimated_delivery', 'currency',
 ]
 
 function parseShipment(body) {
@@ -26,6 +27,10 @@ function parseShipment(body) {
   }
   if (data.payment_status && !['Paid', 'Unpaid', 'Pending'].includes(data.payment_status)) {
     throw new Error('payment_status must be Paid, Unpaid or Pending')
+  }
+  if (data.currency !== undefined) {
+    data.currency = String(data.currency).toUpperCase()
+    if (!isValidCurrency(data.currency)) throw new Error('Unsupported currency')
   }
   if (!data.sender_email || !data.recipient_email || !data.sender_name || !data.recipient_name) {
     throw new Error('Sender and recipient name and email are required')
@@ -128,20 +133,54 @@ router.get('/shipments/:id', async (req, res) => {
 })
 
 // PATCH /api/v1/shipments/:id — edit consignment details
+// Also accepts `progress_percentage` (0-100) and/or `current_status` so the
+// admin UI can drive the progress bar and status directly.
 router.patch('/shipments/:id', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    const data = parseShipment({ ...shipment.toObject(), ...req.body })
-    const fin = computeFinancials({ ...shipment.toObject(), ...req.body })
-    Object.assign(shipment, data, {
-      base_freight: fin.base,
-      surcharge_fuel: fin.fuel,
-      surcharge_customs: fin.customs,
-      total_cost: fin.total,
-    })
+
+    // Direct progress/status edits (independent of the consignment fields)
+    const body = req.body || {}
+    const touch = {}
+    if (body.progress_percentage !== undefined && body.progress_percentage !== null && body.progress_percentage !== '') {
+      const p = Number(body.progress_percentage)
+      if (!Number.isFinite(p) || p < 0 || p > 100) {
+        return res.status(400).json({ error: 'progress_percentage must be a number between 0 and 100' })
+      }
+      touch.progress = Math.round(p)
+    }
+    if (body.current_status !== undefined && body.current_status !== '') {
+      if (!(body.current_status in STATUS_PROGRESS)) {
+        return res.status(400).json({ error: `Invalid status: ${body.current_status}` })
+      }
+      touch.status = body.current_status
+    }
+
+    const hasConsign = Object.keys(body).some((k) => SHIPMENT_FIELDS.includes(k))
+    if (hasConsign) {
+      const data = parseShipment({ ...shipment.toObject(), ...body })
+      const fin = computeFinancials({ ...shipment.toObject(), ...body })
+      Object.assign(shipment, data, {
+        base_freight: fin.base,
+        surcharge_fuel: fin.fuel,
+        surcharge_customs: fin.customs,
+        total_cost: fin.total,
+      })
+    }
+    if (touch.status) shipment.current_status = touch.status
+    if (touch.progress !== undefined) shipment.progress_percentage = touch.progress
+
+    const nothingToDo = !hasConsign && !touch.status && touch.progress === undefined
+    if (nothingToDo) return res.status(400).json({ error: 'No editable fields provided' })
+
     await shipment.save()
-    await audit(req.admin, 'shipment.updated', 'shipment', String(shipment._id), `Updated ${shipment.tracking_number}`)
+    const bits = [
+      touch.status ? `status → ${touch.status}` : null,
+      touch.progress !== undefined ? `progress → ${touch.progress}%` : null,
+      hasConsign ? 'consignment details' : null,
+    ].filter(Boolean).join(', ')
+    await audit(req.admin, 'shipment.updated', 'shipment', String(shipment._id), `${shipment.tracking_number}: ${bits}`)
     res.json({ shipment: withTimeline(shipment) })
   } catch (e) {
     res.status(400).json({ error: e.message })
