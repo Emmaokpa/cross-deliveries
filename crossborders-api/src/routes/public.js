@@ -1,16 +1,17 @@
 import { Router } from 'express'
 import { Shipment } from '../db.js'
-import { computeQuote } from '../services/shipment-utils.js'
+// Shipping quote engine — kept for later, endpoint disabled for now
+// import { computeQuote } from '../services/shipment-utils.js'
 
 const router = Router()
 
-// POST /api/v1/quote — public rate calculator (no auth)
-router.post('/quote', (req, res) => {
-  const { zone, cargo_type, weight, insurance } = req.body || {}
-  const quote = computeQuote({ zone, cargo_type, weight, insurance })
-  if (quote.error) return res.status(400).json({ error: quote.error })
-  res.json({ quote })
-})
+// POST /api/v1/quote — public rate calculator (no auth) — DISABLED for now
+// router.post('/quote', (req, res) => {
+//   const { zone, cargo_type, weight, insurance } = req.body || {}
+//   const quote = computeQuote({ zone, cargo_type, weight, insurance })
+//   if (quote.error) return res.status(400).json({ error: quote.error })
+//   res.json({ quote })
+// })
 
 // GET /api/v1/track/:tracking_id — public, unauthenticated (homepage search box)
 router.get('/track/:tracking_id', async (req, res) => {

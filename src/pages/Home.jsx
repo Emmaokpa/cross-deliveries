@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import HeroSlider from '../components/HeroSlider.jsx'
 import TrackForm from '../components/TrackForm.jsx'
-import QuoteCalculator from '../components/QuoteCalculator.jsx'
+// Shipping quote calculator — disabled for now (also commented out on the API side)
+// import QuoteCalculator from '../components/QuoteCalculator.jsx'
 import { services, partnerLogos } from '../data/site.js'
 
 export default function Home() {
@@ -18,9 +19,13 @@ export default function Home() {
         }}
       >
         <div className="absolute inset-0 bg-navy/45" />
-        <div className="container-x relative z-[2] grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+        <div className="container-x relative z-[2]">
           <TrackForm />
-          <QuoteCalculator />
+          {/* Shipping quote calculator — disabled for now
+          <div className="mt-6 lg:mt-0">
+            <QuoteCalculator />
+          </div>
+          */}
         </div>
       </section>
 
