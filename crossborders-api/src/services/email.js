@@ -320,10 +320,19 @@ function smtpConfigured() {
 // Remembers which SMTP port worked so later sends skip dead ports
 let lastGoodPort = null
 
+// Masks an email/key for diagnostics: "john.doe@gmail.com" → "j***@g***.com"
+function mask(v) {
+  const s = String(v || '')
+  if (!s) return '(empty!)'
+  if (s.includes('@')) return `${s[0]}***@${s.split('@')[1]?.[0]}***.com`
+  return `${s.slice(0, 8)}***(${s.length} chars)`
+}
+
 // Tries the last working port first, then SMTP_PORT, then Brevo's alternates (2525, 465).
 // Throws the last error if every port fails.
 async function sendViaSmtp(mailOptions) {
-  const { SMTP_PORT } = process.env
+  const { SMTP_PORT, SMTP_USER } = process.env
+  console.log(`[smtp] attempting send as user=${mask(SMTP_USER)}`)
   const ports = [...new Set([
     ...(lastGoodPort ? [lastGoodPort] : []),
     Number(SMTP_PORT) || 587,
