@@ -137,18 +137,21 @@ function metaGrid(doc, shipment) {
     ['Estimated Delivery', eta],
     ['Currency', shipment.currency || 'NGN'],
   ]
-  const colW = (doc.page.width - 96) / 4
-  let row = 0
+  // 3 columns with dynamic row height so wrapped values never overlap
+  const cols = 3
+  const colW = (doc.page.width - 96) / cols
+  const rowH = 40
+  const startY = doc.y
   items.forEach(([label, value], i) => {
-    const x = 48 + (i % 4) * colW
-    const y = doc.y + (i % 4 === 0 && i > 0 ? 34 : 0)
-    if (i % 4 === 0 && i > 0) row++
-    doc.font('Helvetica').fontSize(7.5).fillColor(GREY)
-    doc.text(String(label).toUpperCase(), x, y, { characterSpacing: 0.5 })
-    doc.font('Helvetica-Bold').fontSize(10.5).fillColor(NAVY)
-    doc.text(String(value), x, y + 12, { width: colW - 14 })
+    const x = 48 + (i % cols) * colW
+    const y = startY + Math.floor(i / cols) * rowH
+    doc.font('Helvetica').fontSize(7).fillColor(GREY)
+    doc.text(String(label).toUpperCase(), x, y, { characterSpacing: 0.6 })
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(NAVY)
+    doc.text(String(value), x, y + 11, { width: colW - 18, lineGap: 1 })
   })
-  doc.y = doc.y + 76
+  const rows = Math.ceil(items.length / cols)
+  doc.y = startY + rows * rowH + 8
 }
 
 function pricingTable(doc, shipment) {
