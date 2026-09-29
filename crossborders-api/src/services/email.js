@@ -257,7 +257,7 @@ function renderTemplate(shipment) {
             <td style="padding:16px 34px 28px;text-align:center;">
               <div style="color:#9CA3AF;font-size:11.5px;line-height:1.8;">
                 <strong style="color:${NAVY};">CrossBordersDeliveries</strong> — leading logistics and distribution services<br />
-                No. 19/3 PK. 34810 Beykoz / Istanbul, Türkiye &bull; crossborder.delivery@outlook.com &bull; +90 806 055 2123<br />
+                No. 19/3 PK. 34810 Beykoz / Istanbul, Türkiye &bull; support@crossbordersdeliveries.com &bull; +90 806 055 2123<br />
                 <span style="font-size:10.5px;">This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.</span>
               </div>
             </td>
@@ -305,8 +305,12 @@ function smtpTransport() {
   return nodemailer.createTransport({
     host: SMTP_HOST,
     port,
-    secure: port === 465,
+    secure: port === 465, // 465 = implicit TLS, 587 = STARTTLS
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    // Fail fast with a clear error instead of hanging on unreachable servers
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 30_000,
   })
 }
 
@@ -352,8 +356,15 @@ export async function sendShipmentEmail(shipment, admin) {
     await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via SMTP`)
     return { sent: true, to, subject, message: 'Email sent via SMTP.' }
   } catch (err) {
-    console.error('[smtp] send failed:', err.message)
-    await audit(admin, 'email.failed', 'shipment', String(shipment._id), String(err.message).slice(0, 300))
-    return { sent: false, error: err.message, to, subject, message: 'SMTP send failed — see server logs.' }
+    const { SMTP_HOST, SMTP_PORT } = process.env
+    const hint =
+      err.code === 'ETIMEDOUT' || /timeout/i.test(err.message)
+        ? ` — could not reach ${SMTP_HOST || '(unset)'}:${SMTP_PORT || 587}. Check SMTP_HOST/SMTP_PORT on the host, provider firewall, and that the port matches (587 STARTTLS vs 465 TLS).`
+        : err.code === 'EAUTH'
+          ? ' — authentication rejected. For Gmail use an App Password; for Brevo use the SMTP key.'
+          : ''
+    console.error(`[smtp] send failed (${err.code || 'error'}): ${err.message}${hint}`)
+    await audit(admin, 'email.failed', 'shipment', String(shipment._id), `${err.code || 'error'}: ${String(err.message).slice(0, 200)}`)
+    return { sent: false, error: err.message, to, subject, message: `SMTP send failed (${err.code || 'error'})${hint}` }
   }
 }
