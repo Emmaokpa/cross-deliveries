@@ -82,7 +82,12 @@ export default function Dashboard() {
               <tbody>
                 {shipments.slice(0, 6).map((s) => (
                   <tr key={s.id}>
-                    <td data-label="Tracking"><Link className="mono" to={`/admin/shipments/${s.id}`}><CopyChip value={s.tracking_number} /></Link></td>
+                    <td data-label="Tracking">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Link className="mono" to={`/admin/shipments/${s.id}`}>{s.tracking_number}</Link>
+                        <CopyChip value={s.tracking_number} label="" className="copy-icon" title={`Copy ${s.tracking_number}`} />
+                      </div>
+                    </td>
                     <td data-label="Recipient">{s.recipient_name}</td>
                     <td data-label="Route" style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
                     <td data-label="Status"><Badge value={s.current_status} /></td>

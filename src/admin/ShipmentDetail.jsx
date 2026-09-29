@@ -282,7 +282,11 @@ export default function ShipmentDetail() {
     <>
       <div className="page-head">
         <div>
-          <h3><CopyChip value={s.tracking_number} /> <Badge value={s.current_status} /></h3>
+          <h3>
+            <Link className="mono" to={`/admin/shipments/${s.id}`} style={{ textDecoration: 'none' }}>{s.tracking_number}</Link>
+            <CopyChip value={s.tracking_number} label="" className="copy-icon" title={`Copy ${s.tracking_number}`} />
+            <Badge value={s.current_status} />
+          </h3>
           <div className="sub">{s.origin_city || '—'} → {s.destination_city || '—'} • {s.cargo_type} freight • created {fmtDate(s.created_at)}</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

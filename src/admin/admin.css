@@ -385,6 +385,8 @@ table.data-table {
 }
 .copy-chip:hover { background: #eef3fb; border-color: #c7d4ea; }
 .copy-chip.copied { border-color: #86dfa8; background: #e9f9ef; color: #15803d; }
+.copy-chip.copy-icon { border: none; padding: 3px 5px; margin: 0; }
+.copy-chip.copy-icon:hover { background: #eef3fb; }
 
 /* ---------- Mobile card view for tables ----------
    On small screens each table row becomes a stacked card.

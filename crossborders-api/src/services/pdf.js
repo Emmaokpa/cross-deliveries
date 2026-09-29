@@ -122,6 +122,9 @@ function party(doc, heading, lines, x, y) {
 }
 
 function metaGrid(doc, shipment) {
+  const eta = shipment.estimated_delivery
+    ? new Date(shipment.estimated_delivery).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '—'
   const items = [
     ['Cargo Type', shipment.cargo_type],
     ['Origin', shipment.origin_city || '—'],
@@ -131,6 +134,8 @@ function metaGrid(doc, shipment) {
     ['Quantity', String(shipment.package_quantity || 1)],
     ['Payment Status', shipment.payment_status],
     ['Current Status', shipment.current_status],
+    ['Estimated Delivery', eta],
+    ['Currency', shipment.currency || 'NGN'],
   ]
   const colW = (doc.page.width - 96) / 4
   let row = 0

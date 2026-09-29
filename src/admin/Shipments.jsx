@@ -95,7 +95,10 @@ export default function Shipments() {
               {shipments.map((s) => (
                 <tr key={s.id}>
                   <td>
-                    <Link to={`/admin/shipments/${s.id}`}><CopyChip value={s.tracking_number} /></Link>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Link className="mono" to={`/admin/shipments/${s.id}`}>{s.tracking_number}</Link>
+                      <CopyChip value={s.tracking_number} label="" className="copy-icon" title={`Copy ${s.tracking_number}`} />
+                    </div>
                   </td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{s.recipient_name}</div>
