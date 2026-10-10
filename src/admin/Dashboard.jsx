@@ -17,11 +17,21 @@ export default function Dashboard() {
       .catch((e) => setError(e.message))
   }, [])
 
+  // Revenue is grouped per currency — shipments can hold different currencies,
+  // so summing them into one figure (the old NGN-only total) was misleading.
+  const paidByCurrency = shipments
+    .filter((s) => s.payment_status === 'Paid')
+    .reduce((acc, s) => {
+      const code = String(s.currency || 'NGN').toUpperCase()
+      acc[code] = (acc[code] || 0) + Number(s.total_cost || 0)
+      return acc
+    }, {})
+  const revenueParts = Object.entries(paidByCurrency).map(([code, amt]) => fmtMoney(amt, code))
+
   const stats = {
     total: shipments.length,
     active: shipments.filter((s) => !['Delivered'].includes(s.current_status)).length,
     delivered: shipments.filter((s) => s.current_status === 'Delivered').length,
-    revenue: shipments.reduce((sum, s) => sum + (s.payment_status === 'Paid' ? Number(s.total_cost || 0) : 0), 0),
   }
 
   const byStatus = STATUSES.map((s) => ({ status: s, count: shipments.filter((x) => x.current_status === s).length }))
@@ -53,7 +63,7 @@ export default function Dashboard() {
         </div>
         <div className="stat-card">
           <div className="ic amber">💳</div>
-          <div><div className="lbl">Collected Revenue</div><div className="val">{fmtMoney(stats.revenue)}</div></div>
+          <div><div className="lbl">Collected Revenue</div><div className="val">{revenueParts.length ? revenueParts.join(' • ') : fmtMoney(0, 'NGN')}</div></div>
         </div>
       </div>
 

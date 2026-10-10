@@ -10,7 +10,7 @@ const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out fo
 const EMPTY_FORM = {
   recipient_name: '', recipient_email: '', recipient_phone: '', recipient_address: '',
   recipient_city: '', recipient_country: '', origin_city: '', destination_city: '',
-  cargo_type: 'Air', package_weight: '', package_dimensions: '', package_quantity: 1, package_description: '',
+  cargo_type: 'Air', package_weight: '', package_quantity: 1, package_description: '',
   base_freight: '', surcharge_fuel: '', surcharge_customs: '', payment_status: 'Unpaid', currency: 'NGN',
 }
 
@@ -181,12 +181,11 @@ export default function Shipments() {
                 </select>
               </Field>
               <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={form.package_weight} onChange={setF('package_weight')} /></Field>
-              <Field label="Dimensions"><input value={form.package_dimensions} onChange={setF('package_dimensions')} placeholder="120 x 80 x 60 cm" /></Field>
               <Field label="Quantity"><input type="number" min="1" value={form.package_quantity} onChange={setF('package_quantity')} /></Field>
               <Field label="Description"><input value={form.package_description} onChange={setF('package_description')} /></Field>
             </div>
 
-            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials (USD)</h4>
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials</h4>
             <div className="form-grid">
               <Field label="Base freight"><input type="number" step="0.01" min="0" value={form.base_freight} onChange={setF('base_freight')} /></Field>
               <Field label="Fuel surcharge"><input type="number" step="0.01" min="0" value={form.surcharge_fuel} onChange={setF('surcharge_fuel')} /></Field>

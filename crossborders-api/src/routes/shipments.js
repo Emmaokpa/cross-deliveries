@@ -3,7 +3,7 @@ import { Shipment, Types } from '../db.js'
 import { audit, authRequired } from './auth.js'
 import { STATUS_PROGRESS, TRACKING_URL, generateTrackingNumber, computeFinancials } from '../services/shipment-utils.js'
 import { buildInvoicePdf } from '../services/pdf.js'
-import { sendShipmentEmail, sendConfirmationEmail } from '../services/email.js'
+import { sendShipmentEmail, sendConfirmationEmail, fillTemplate, renderConfirmationLetter } from '../services/email.js'
 import { HARDCODED_SENDER } from '../services/company.js'
 import { isValidCurrency } from '../services/currency.js'
 
@@ -446,6 +446,27 @@ router.post('/shipments/:id/send-email', async (req, res) => {
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
   const result = await sendShipmentEmail(shipment, req.admin)
   res.json(result)
+})
+
+// GET /api/v1/shipments/:id/email.html?template=confirmation|status — renders the
+// mail template as HTML so the admin can preview/download it, exactly like the
+// invoice.pdf button. Default: the confirmation letter.
+router.get('/shipments/:id/email.html', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    const doc = shipment.toObject ? shipment.toObject() : shipment
+    const template = String(req.query.template || 'confirmation').toLowerCase()
+    const isStatus = template === 'status'
+    const html = isStatus ? fillTemplate(doc) : renderConfirmationLetter(doc)
+    const filename = `${shipment.tracking_number}-${isStatus ? 'status-email' : 'confirmation-letter'}.html`
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+    res.send(html)
+    await audit(req.admin, 'email.previewed', 'shipment', String(shipment._id), `Rendered ${isStatus ? 'status' : 'confirmation'} template for ${shipment.tracking_number}`)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
 })
 
 // POST /api/v1/shipments/:id/send-confirmation — the admin's "Send Confirmation

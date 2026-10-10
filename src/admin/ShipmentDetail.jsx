@@ -261,6 +261,36 @@ export default function ShipmentDetail() {
     }
   }
 
+  // Downloads the rendered mail templates (confirmation letter + status email)
+  // as HTML files — preview them locally, just like the invoice PDF download.
+  const getEmailTemplates = async () => {
+    try {
+      for (const [template, name] of [
+        ['confirmation', 'confirmation-letter'],
+        ['status', 'status-email'],
+      ]) {
+        const html = await api(`/v1/shipments/${s.id}/email.html?template=${template}`)
+        downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${s.tracking_number}-${name}.html`)
+      }
+      toast('Email templates downloaded — open them in your browser to preview.', 'ok')
+    } catch (err) {
+      toast(err.message, 'err')
+    }
+  }
+
+  // Opens the exact letter the recipient will receive, in a new tab.
+  const previewLetter = async () => {
+    const win = window.open('', '_blank') // opened synchronously so pop-up blockers allow it
+    try {
+      const html = await api(`/v1/shipments/${s.id}/email.html?template=confirmation`)
+      win.document.write(html)
+      win.document.close()
+    } catch (err) {
+      win?.close()
+      toast(err.message, 'err')
+    }
+  }
+
   const openCpAdd = () => {
     setCpForm({ timestamp: '', location: '', status_tag: s.current_status, admin_notes: '', set_status: '', progress_percentage: '' })
     setCpModal({ mode: 'add' })
@@ -371,7 +401,7 @@ export default function ShipmentDetail() {
       recipient_name: s.recipient_name || '', recipient_email: s.recipient_email || '', recipient_phone: s.recipient_phone || '', recipient_address: s.recipient_address || '',
       recipient_city: s.recipient_city || '', recipient_country: s.recipient_country || '',
       origin_city: s.origin_city || '', destination_city: s.destination_city || '',
-      cargo_type: s.cargo_type || 'Air', package_weight: s.package_weight ?? '', package_dimensions: s.package_dimensions || '',
+      cargo_type: s.cargo_type || 'Air', package_weight: s.package_weight ?? '',
       package_quantity: s.package_quantity ?? 1, package_description: s.package_description || '',
       base_freight: s.base_freight ?? '', surcharge_fuel: s.surcharge_fuel ?? '', surcharge_customs: s.surcharge_customs ?? '',
       payment_status: s.payment_status || 'Unpaid', currency: s.currency || 'NGN',
@@ -464,6 +494,7 @@ export default function ShipmentDetail() {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn-a btn-primary-a" onClick={openEdit}>✎ Edit Details</button>
           <button className="btn-a btn-ghost-a" onClick={getInvoice}>⬇ Invoice PDF</button>
+          <button className="btn-a btn-ghost-a" onClick={getEmailTemplates}>⬇ Email Template</button>
           <button className="btn-a btn-navy-a" onClick={sendEmail}>✉ Send / Resend Email</button>
           <button className="btn-a btn-primary-a" onClick={openConf}>📨 Send Confirmation</button>
           <button className="btn-a btn-danger-a" onClick={() => { setDelText(''); setDelOpen(true) }}>🗑 Delete</button>
@@ -523,7 +554,7 @@ export default function ShipmentDetail() {
               <div className="kv"><span className="k">Sender</span><span className="v">{COMPANY.legal_name} • {COMPANY.email}</span></div>
               <div className="kv"><span className="k">Recipient</span><span className="v">{s.recipient_name} • {s.recipient_email}</span></div>
               <div className="kv"><span className="k">Delivery address</span><span className="v">{s.recipient_address || '—'}, {s.recipient_city} {s.recipient_country}</span></div>
-              <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • {s.package_weight} kg • {s.package_dimensions || '—'} • ×{s.package_quantity}</span></div>
+              <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • {s.package_weight} kg • ×{s.package_quantity}</span></div>
               <div className="kv"><span className="k">Description</span><span className="v">{s.package_description || '—'}</span></div>
               <div className="kv"><span className="k">Base freight</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
               <div className="kv"><span className="k">Fuel surcharge</span><span className="v">{fmtMoney(s.surcharge_fuel, s.currency)}</span></div>
@@ -710,7 +741,6 @@ export default function ShipmentDetail() {
                 </select>
               </Field>
               <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={editForm.package_weight} onChange={setE('package_weight')} /></Field>
-              <Field label="Dimensions"><input value={editForm.package_dimensions} onChange={setE('package_dimensions')} /></Field>
               <Field label="Quantity"><input type="number" min="1" value={editForm.package_quantity} onChange={setE('package_quantity')} /></Field>
               <Field label="Description"><input value={editForm.package_description} onChange={setE('package_description')} /></Field>
             </div>
@@ -745,6 +775,7 @@ export default function ShipmentDetail() {
           footer={
             <>
               <button className="btn-a btn-ghost-a" onClick={() => setConfOpen(false)}>Cancel</button>
+              <button className="btn-a btn-ghost-a" onClick={previewLetter}>👁 Preview Letter</button>
               <button className="btn-a btn-primary-a" onClick={sendConfirmation} disabled={confBusy}>
                 {confBusy ? 'Sending…' : '✉ Send Confirmation'}
               </button>
