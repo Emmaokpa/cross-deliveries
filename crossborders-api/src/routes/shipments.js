@@ -3,7 +3,8 @@ import { Shipment, Types } from '../db.js'
 import { audit, authRequired } from './auth.js'
 import { STATUS_PROGRESS, TRACKING_URL, generateTrackingNumber, computeFinancials } from '../services/shipment-utils.js'
 import { buildInvoicePdf } from '../services/pdf.js'
-import { sendShipmentEmail } from '../services/email.js'
+import { sendShipmentEmail, sendConfirmationEmail } from '../services/email.js'
+import { HARDCODED_SENDER } from '../services/company.js'
 import { isValidCurrency } from '../services/currency.js'
 
 const router = Router()
@@ -32,8 +33,11 @@ function parseShipment(body) {
     data.currency = String(data.currency).toUpperCase()
     if (!isValidCurrency(data.currency)) throw new Error('Unsupported currency')
   }
-  if (!data.sender_email || !data.recipient_email || !data.sender_name || !data.recipient_name) {
-    throw new Error('Sender and recipient name and email are required')
+  // Sender/company details are HARDCODED — any sender fields sent by a
+  // client are ignored and replaced with the company constants.
+  Object.assign(data, HARDCODED_SENDER)
+  if (!data.recipient_email || !data.recipient_name) {
+    throw new Error('Recipient name and email are required')
   }
   if (data.estimated_delivery !== undefined) {
     if (data.estimated_delivery === null || data.estimated_delivery === '') {
@@ -429,9 +433,10 @@ router.delete('/shipments/:id/pod', async (req, res) => {
 router.get('/shipments/:id/invoice.pdf', async (req, res) => {
   const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+  const doc = await buildInvoicePdf(shipment.toObject ? shipment.toObject() : shipment)
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `attachment; filename="${shipment.tracking_number}-invoice.pdf"`)
-  buildInvoicePdf(shipment.toObject ? shipment.toObject() : shipment).pipe(res)
+  doc.pipe(res)
   await audit(req.admin, 'invoice.generated', 'shipment', String(shipment._id), `PDF invoice for ${shipment.tracking_number}`)
 })
 
@@ -441,6 +446,44 @@ router.post('/shipments/:id/send-email', async (req, res) => {
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
   const result = await sendShipmentEmail(shipment, req.admin)
   res.json(result)
+})
+
+// POST /api/v1/shipments/:id/send-confirmation — the admin's "Send Confirmation
+// Letter" button. The body carries ONLY receiver details typed by the admin
+// (name, email, phone, address, city, country). The letterhead, sender block,
+// signature and date are hardcoded server-side; the reference number is always
+// this shipment's tracking number.
+router.post('/shipments/:id/send-confirmation', async (req, res) => {
+  try {
+    const shipment = await getShipment(req.params.id)
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+
+    const b = req.body || {}
+    const pick = (key, fallback) => (b[key] !== undefined ? String(b[key]).trim() : fallback)
+    const recipient_name = pick('recipient_name', shipment.recipient_name)
+    const recipient_email = pick('recipient_email', shipment.recipient_email)
+
+    if (!recipient_name) return res.status(400).json({ error: 'Recipient name is required' })
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient_email)) {
+      return res.status(400).json({ error: 'A valid recipient email is required' })
+    }
+
+    // Persist the editable receiver details; keep the sender block locked
+    shipment.recipient_name = recipient_name
+    shipment.recipient_email = recipient_email
+    shipment.recipient_phone = pick('recipient_phone', shipment.recipient_phone)
+    shipment.recipient_address = pick('recipient_address', shipment.recipient_address)
+    shipment.recipient_city = pick('recipient_city', shipment.recipient_city)
+    shipment.recipient_country = pick('recipient_country', shipment.recipient_country)
+    Object.assign(shipment, HARDCODED_SENDER)
+    await shipment.save()
+    await audit(req.admin, 'confirmation.sent', 'shipment', String(shipment._id), `Confirmation letter for ${shipment.tracking_number} → ${recipient_email}`)
+
+    const result = await sendConfirmationEmail(shipment, req.admin)
+    res.json({ ...result, shipment: withTimeline(shipment) })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
 })
 
 export default router

@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
 import fs from 'node:fs'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
+import { COMPANY } from './company.js'
 
 const BRAND_RED = '#E30613'
 const NAVY = '#031435'
@@ -24,48 +25,70 @@ const money = (n, code = 'NGN') => {
 const M = 48 // page margin
 const PW = () => 595.28 - M * 2 // usable width (A4)
 
-export function buildInvoicePdf(shipment) {
+// PDF core fonts (Helvetica) use WinAnsiEncoding, which has no "İ" (U+0130) —
+// transliterate it so the address renders correctly instead of as garbage.
+const pdfText = (s) => String(s ?? '').replace(/İ/g, 'I')
+
+export async function buildInvoicePdf(shipment) {
   const doc = new PDFDocument({ size: 'A4', margin: M })
-  drawLetterhead(doc, shipment)
+  await drawLetterhead(doc, shipment)
   titleBlock(doc, shipment)
   partyCards(doc, shipment)
   metaGrid(doc, shipment)
   pricingTable(doc, shipment)
 
-  // Footer
+  // Footer — kept as short single lines and clear of the bottom margin:
+  // a long line used to wrap past the margin and make pdfkit append blank
+  // extra pages ("Page 1 of 1" ended up alone on page 3).
   doc.fontSize(8).fillColor(GREY)
   doc.text(
-    'CrossBordersDeliveries.com — leading logistics and distribution services. This document is generated electronically and is valid without signature.',
+    'CrossBordersDeliveries.com — leading logistics and distribution services.',
     M,
-    doc.page.height - 64,
+    doc.page.height - 84,
+    { width: doc.page.width - M * 2, align: 'center', lineBreak: false },
+  )
+  doc.text(
+    'This document is generated electronically and is valid without signature.',
+    M,
+    doc.page.height - 72,
     { width: doc.page.width - M * 2, align: 'center', lineBreak: false },
   )
   doc.fontSize(7.5).fillColor('#9AA3B2')
-  doc.text(`Page 1 of 1`, M, doc.page.height - 50, { width: doc.page.width - M * 2, align: 'center', lineBreak: false })
+  doc.text(`Page 1 of 1`, M, doc.page.height - 60, { width: doc.page.width - M * 2, align: 'center', lineBreak: false })
   doc.end()
   return doc
 }
 
-function drawLetterhead(doc, shipment) {
-  // Header band
-  doc.rect(0, 0, doc.page.width, 88).fill(NAVY)
-  doc.rect(0, 88, doc.page.width, 4).fill(BRAND_RED)
+async function drawLetterhead(doc, shipment) {
+  // Header band — HARDCODED company letterhead (never editable)
+  doc.rect(0, 0, doc.page.width, 104).fill(NAVY)
+  doc.rect(0, 104, doc.page.width, 4).fill(BRAND_RED)
 
   // Brand logo (white card behind it since the PNG has transparent background)
   if (fs.existsSync(LOGO_PATH)) {
     doc.save()
-    doc.roundedRect(doc.page.width - 164, 14, 94, 58, 8).fill('#FFFFFF')
+    doc.roundedRect(doc.page.width - 160, 8, 90, 40, 8).fill('#FFFFFF')
     try {
-      doc.image(LOGO_PATH, doc.page.width - 156, 20, { fit: [78, 46], align: 'center', valign: 'center' })
+      doc.image(LOGO_PATH, doc.page.width - 152, 13, { fit: [74, 30], align: 'center', valign: 'center' })
     } catch {
       /* logo optional */
     }
     doc.restore()
   }
 
+  // QR code under the logo, linking to public tracking
+  // (toBuffer returns a Promise — it must be awaited or doc.image throws)
+  try {
+    const qr = await QRCode.toBuffer(TRACKING_URL(shipment.tracking_number), { width: 220, margin: 0, color: { dark: NAVY, light: '#FFFFFF' } })
+    doc.image(qr, doc.page.width - 135, 52, { width: 40, height: 40 })
+    doc.fontSize(6).fillColor('#B9C2D8').text('SCAN TO TRACK', doc.page.width - 147, 94, { width: 64, align: 'center' })
+  } catch {
+    /* QR optional */
+  }
+
   // Logo mark (starburst-inspired)
   const cx = 60
-  const cy = 44
+  const cy = 46
   doc.circle(cx, cy, 5).fill(BRAND_RED)
   doc.moveTo(cx, cy - 20).lineTo(cx, cy - 11).lineWidth(2).strokeColor(BRAND_RED).stroke()
   doc.moveTo(cx, cy + 11).lineTo(cx, cy + 20).strokeColor('#FFFFFF').stroke()
@@ -73,26 +96,25 @@ function drawLetterhead(doc, shipment) {
   doc.moveTo(cx + 11, cy).lineTo(cx + 20, cy).strokeColor(BRAND_RED).stroke()
 
   doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(16)
-  doc.text('CrossBordersDeliveries', 92, 26)
-  doc.font('Helvetica').fontSize(8).fillColor('#B9C2D8')
-  doc.text('GLOBAL LOGISTICS & COURIER SERVICES  •  AIR  •  OCEAN  •  ROAD', 92, 47)
-  doc.text('crossbordersdeliveries.com  •  crossborder.delivery@outlook.com  •  +90 806 055 2123', 92, 60)
-
-  // QR code top-right linking to public tracking
-  try {
-    const qr = QRCode.toBuffer(TRACKING_URL(shipment.tracking_number), { width: 220, margin: 0, color: { dark: NAVY, light: '#FFFFFF' } })
-    doc.image(qr, doc.page.width - M - 40, 96, { width: 40, height: 40 })
-    doc.fontSize(6).fillColor(GREY).text('SCAN TO TRACK', doc.page.width - M - 52, 138, { width: 64, align: 'center' })
-  } catch {
-    /* QR optional */
-  }
+  doc.text(COMPANY.legal_name, 92, 16)
+  doc.font('Helvetica').fontSize(7.5).fillColor('#B9C2D8')
+  doc.text('GLOBAL LOGISTICS & COURIER SERVICES  •  AIR  •  OCEAN  •  ROAD', 92, 37)
+  doc.fontSize(7).fillColor('#DCE3F0')
+  doc.text(pdfText(COMPANY.address), 92, 51)
+  doc.text(`Fax: ${COMPANY.fax}  •  Reg. No. ${COMPANY.reg_no}`, 92, 64)
+  doc.text(`Email: ${COMPANY.email}  •  Website: ${COMPANY.website}`, 92, 77)
 }
 
-// Compact, aligned title row: left = document type, right = tracking + ETA
+// Compact, aligned title row: left = document type + current date, right = tracking
 function titleBlock(doc, shipment) {
-  const y = 118
+  const y = 124
   doc.font('Helvetica-Bold').fontSize(14).fillColor(NAVY)
   doc.text('COMMERCIAL INVOICE / WAYBILL', M, y, { characterSpacing: 0.5, lineBreak: false })
+
+  // Date — always the current date, never stored or editable
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  doc.font('Helvetica').fontSize(8.5).fillColor(GREY)
+  doc.text(`Date: ${today}`, M, y + 15, { lineBreak: false })
 
   doc.font('Helvetica').fontSize(8.5).fillColor(GREY)
   doc.text('Tracking Number:', doc.page.width - M - 190, y, { width: 190, align: 'right', lineBreak: false })
@@ -104,16 +126,19 @@ function titleBlock(doc, shipment) {
   doc.y = ruleY + 12
 }
 
-// Sender / recipient as two equal bordered cards
+// Sender / recipient as two equal bordered cards — sender is the HARDCODED
+// company block, recipient comes from the admin's editable receiver form
 function partyCards(doc, shipment) {
   const y = doc.y
-  const h = 108
+  const h = 130
   const w = (PW() - 14) / 2
   partyCard(doc, 'SENDER', y, w, [
-    shipment.sender_name,
-    shipment.sender_address,
-    shipment.sender_phone,
-    shipment.sender_email,
+    COMPANY.legal_name,
+    pdfText(COMPANY.address),
+    `Reg. No. ${COMPANY.reg_no}`,
+    `Fax: ${COMPANY.fax}`,
+    COMPANY.email,
+    COMPANY.website,
   ])
   const recipientLines = [
     shipment.recipient_name,
@@ -127,7 +152,7 @@ function partyCards(doc, shipment) {
 }
 
 function partyCard(doc, heading, y, w, lines, x = M) {
-  const h = 108
+  const h = 130
   doc.roundedRect(x, y, w, h, 6).fill(CARD_BG)
   doc.roundedRect(x, y, w, h, 6).lineWidth(1).strokeColor(LINE).stroke()
 
@@ -138,9 +163,9 @@ function partyCard(doc, heading, y, w, lines, x = M) {
   doc.font('Helvetica-Bold').fontSize(10.5).fillColor(NAVY)
   doc.text(String(lines[0] || ''), x + pad, y + pad + 14, { width: w - pad * 2, height: 16, ellipsis: true })
 
-  doc.font('Helvetica').fontSize(8.5).fillColor(GREY)
+  doc.font('Helvetica').fontSize(8).fillColor(GREY)
   const body = lines.slice(1).filter(Boolean)
-  doc.text(body.join('\n'), x + pad, y + pad + 34, { width: w - pad * 2, height: h - pad - 40, ellipsis: true, lineGap: 1.5 })
+  doc.text(body.join('\n'), x + pad, y + pad + 34, { width: w - pad * 2, height: h - pad - 42, ellipsis: true, lineGap: 2 })
 }
 
 // Bordered 4 × 2 details grid — every cell framed, identical size

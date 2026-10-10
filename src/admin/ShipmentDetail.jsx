@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { api, downloadBlob } from './api.js'
-import { Badge, Field, Modal, Progress, fmtMoney, fmtDate, useToast } from './components.jsx'
+import { Badge, Field, Modal, Progress, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
 import { CURRENCIES } from './currencies.js'
+import { COMPANY } from './company.js'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
@@ -153,6 +154,9 @@ export default function ShipmentDetail() {
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [editBusy, setEditBusy] = useState(false)
+  const [confOpen, setConfOpen] = useState(false)
+  const [confForm, setConfForm] = useState(null)
+  const [confBusy, setConfBusy] = useState(false)
   const [podName, setPodName] = useState('')
   const [podSig, setPodSig] = useState(null)
   const [podEmpty, setPodEmpty] = useState(true)
@@ -207,6 +211,43 @@ export default function ShipmentDetail() {
       load()
     } catch (err) {
       toast(err.message, 'err')
+    }
+  }
+
+  // Confirmation letter — receiver-only form. Sender/letterhead/signature are
+  // hardcoded server-side, the date is always current, and the reference
+  // number is this shipment's tracking number.
+  const openConf = () => {
+    setConfForm({
+      recipient_name: s.recipient_name || '',
+      recipient_email: s.recipient_email || '',
+      recipient_phone: s.recipient_phone || '',
+      recipient_address: s.recipient_address || '',
+      recipient_city: s.recipient_city || '',
+      recipient_country: s.recipient_country || '',
+    })
+    setConfOpen(true)
+  }
+
+  const setC = (k) => (e) => setConfForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const sendConfirmation = async (e) => {
+    e.preventDefault()
+    setConfBusy(true)
+    try {
+      const data = await api(`/v1/shipments/${s.id}/send-confirmation`, { method: 'POST', body: confForm })
+      setShipment(data.shipment)
+      setConfOpen(false)
+      toast(
+        data.simulated
+          ? 'Confirmation letter simulated — no mail service configured (set BREVO_API_KEY).'
+          : `Confirmation letter sent to ${data.to}.`,
+        'ok',
+      )
+    } catch (err) {
+      toast(err.message, 'err')
+    } finally {
+      setConfBusy(false)
     }
   }
 
@@ -327,7 +368,6 @@ export default function ShipmentDetail() {
 
   const openEdit = () => {
     setEditForm({
-      sender_name: s.sender_name || '', sender_email: s.sender_email || '', sender_phone: s.sender_phone || '', sender_address: s.sender_address || '',
       recipient_name: s.recipient_name || '', recipient_email: s.recipient_email || '', recipient_phone: s.recipient_phone || '', recipient_address: s.recipient_address || '',
       recipient_city: s.recipient_city || '', recipient_country: s.recipient_country || '',
       origin_city: s.origin_city || '', destination_city: s.destination_city || '',
@@ -425,6 +465,7 @@ export default function ShipmentDetail() {
           <button className="btn-a btn-primary-a" onClick={openEdit}>✎ Edit Details</button>
           <button className="btn-a btn-ghost-a" onClick={getInvoice}>⬇ Invoice PDF</button>
           <button className="btn-a btn-navy-a" onClick={sendEmail}>✉ Send / Resend Email</button>
+          <button className="btn-a btn-primary-a" onClick={openConf}>📨 Send Confirmation</button>
           <button className="btn-a btn-danger-a" onClick={() => { setDelText(''); setDelOpen(true) }}>🗑 Delete</button>
         </div>
       </div>
@@ -479,7 +520,7 @@ export default function ShipmentDetail() {
               )}
             </div>
             <div className="kv-list" style={{ marginTop: 14 }}>
-              <div className="kv"><span className="k">Sender</span><span className="v">{s.sender_name} • {s.sender_email}</span></div>
+              <div className="kv"><span className="k">Sender</span><span className="v">{COMPANY.legal_name} • {COMPANY.email}</span></div>
               <div className="kv"><span className="k">Recipient</span><span className="v">{s.recipient_name} • {s.recipient_email}</span></div>
               <div className="kv"><span className="k">Delivery address</span><span className="v">{s.recipient_address || '—'}, {s.recipient_city} {s.recipient_country}</span></div>
               <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • {s.package_weight} kg • {s.package_dimensions || '—'} • ×{s.package_quantity}</span></div>
@@ -647,15 +688,9 @@ export default function ShipmentDetail() {
           }
         >
           <form onSubmit={saveEdit}>
-            <h4 style={{ color: 'var(--a-navy)', margin: '0 0 10px' }}>Sender</h4>
-            <div className="form-grid">
-              <Field label="Name" required><input value={editForm.sender_name} onChange={setE('sender_name')} required /></Field>
-              <Field label="Email" required><input type="email" value={editForm.sender_email} onChange={setE('sender_email')} required /></Field>
-              <Field label="Phone"><input value={editForm.sender_phone} onChange={setE('sender_phone')} /></Field>
-              <Field label="Address"><input value={editForm.sender_address} onChange={setE('sender_address')} /></Field>
-            </div>
+            <SenderInfo />
 
-            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Recipient</h4>
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver details (editable)</h4>
             <div className="form-grid">
               <Field label="Name" required><input value={editForm.recipient_name} onChange={setE('recipient_name')} required /></Field>
               <Field label="Email" required><input type="email" value={editForm.recipient_email} onChange={setE('recipient_email')} required /></Field>
@@ -698,6 +733,57 @@ export default function ShipmentDetail() {
                 </select>
               </Field>
             </div>
+          </form>
+        </Modal>
+      )}
+
+      {confOpen && confForm && (
+        <Modal
+          title="Send Confirmation Letter"
+          onClose={() => setConfOpen(false)}
+          wide
+          footer={
+            <>
+              <button className="btn-a btn-ghost-a" onClick={() => setConfOpen(false)}>Cancel</button>
+              <button className="btn-a btn-primary-a" onClick={sendConfirmation} disabled={confBusy}>
+                {confBusy ? 'Sending…' : '✉ Send Confirmation'}
+              </button>
+            </>
+          }
+        >
+          <form onSubmit={sendConfirmation}>
+            <div
+              style={{
+                marginBottom: 14,
+                background: '#eef4ff',
+                border: '1px solid #c7d6f5',
+                color: '#1e3a8a',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 13,
+                lineHeight: 1.6,
+              }}
+            >
+              <strong>Official Notification of Incoming Shipment.</strong> The letterhead, sender block and
+              signature are hardcoded; the date is always today (
+              <strong>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>
+              ) and the reference number is <strong>{s.tracking_number}</strong>. Only the receiver details
+              below can be edited.
+            </div>
+            <SenderInfo />
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver details (editable)</h4>
+            <div className="form-grid">
+              <Field label="Full name" required><input value={confForm.recipient_name} onChange={setC('recipient_name')} required /></Field>
+              <Field label="Email" required><input type="email" value={confForm.recipient_email} onChange={setC('recipient_email')} required /></Field>
+              <Field label="Telephone"><input value={confForm.recipient_phone} onChange={setC('recipient_phone')} /></Field>
+              <Field label="Delivery address"><input value={confForm.recipient_address} onChange={setC('recipient_address')} /></Field>
+              <Field label="City"><input value={confForm.recipient_city} onChange={setC('recipient_city')} /></Field>
+              <Field label="Country"><input value={confForm.recipient_country} onChange={setC('recipient_country')} /></Field>
+            </div>
+            <p style={{ margin: '12px 0 0', fontSize: 12.5, color: '#6b7280' }}>
+              Signed by {COMPANY.signatory}, {COMPANY.signatory_title}. Sender, letterhead and signature are
+              fixed and cannot be changed.
+            </p>
           </form>
         </Modal>
       )}

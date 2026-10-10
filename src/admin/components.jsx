@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState } from 'react'
 import { formatMoney } from './currencies.js'
+import { COMPANY } from './company.js'
 
 // ---------- Toasts ----------
 const ToastCtx = createContext(() => {})
@@ -71,6 +72,36 @@ export function Field({ label, required, children }) {
       )}
       {children}
     </div>
+  )
+}
+
+// ---------- Hardcoded sender block ----------
+// The sender/company identity is locked: shown read-only on every form,
+// and the API enforces the same constants on the backend.
+export function SenderInfo({ heading = 'Sender — hardcoded, not editable' }) {
+  return (
+    <>
+      <h4 style={{ color: 'var(--a-navy)', margin: '0 0 10px' }}>{heading}</h4>
+      <div
+        style={{
+          border: '1px solid #e4e8f0',
+          background: '#f8fafc',
+          borderRadius: 10,
+          padding: '12px 14px',
+          fontSize: 13,
+          color: '#374151',
+          lineHeight: 1.7,
+        }}
+      >
+        <strong style={{ color: 'var(--a-navy)' }}>{COMPANY.legal_name}</strong>
+        <br />
+        {COMPANY.address}
+        <br />
+        Email: {COMPANY.email} &nbsp;•&nbsp; Phone: {COMPANY.phone}
+        <br />
+        Fax: {COMPANY.fax} &nbsp;•&nbsp; Reg. No. {COMPANY.reg_no} &nbsp;•&nbsp; {COMPANY.website}
+      </div>
+    </>
   )
 }
 

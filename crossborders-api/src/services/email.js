@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import { Shipment } from '../db.js'
 import { audit } from '../routes/auth.js'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
+import { COMPANY } from './company.js'
 import { buildInvoicePdf } from './pdf.js'
 import { format as fmtMoney } from './currency.js'
 
@@ -109,7 +110,7 @@ function renderTemplate(shipment) {
                   </tr></table>
                 </td>
                 <td align="right" valign="middle" style="color:#8FA0C4;font-size:11px;line-height:1.7;">
-                  Air &bull; Ocean &bull; Road<br />crossbordersdeliveries.com
+                  Air &bull; Ocean &bull; Road<br />${COMPANY.website}
                 </td>
               </tr></table>
             </td>
@@ -202,9 +203,10 @@ function renderTemplate(shipment) {
                   <td valign="top" style="width:50%;padding-left:8px;">
                     <div style="font-size:11px;color:${NAVY};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${NAVY};padding-bottom:5px;margin-bottom:9px;">Sender</div>
                     <table role="presentation">
-                      ${detailRow('Name', '{{sender_name}}')}
-                      ${detailRow('Phone', '{{sender_phone}}')}
-                      ${detailRow('Email', '{{sender_email}}')}
+                      ${detailRow('Name', escapeHtml(COMPANY.legal_name))}
+                      ${detailRow('Address', escapeHtml(COMPANY.address))}
+                      ${detailRow('Phone', escapeHtml(COMPANY.phone))}
+                      ${detailRow('Email', escapeHtml(COMPANY.email))}
                     </table>
                     <div style="font-size:11px;color:${BRAND_RED};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${BRAND_RED};padding-bottom:5px;margin:16px 0 9px;">Consignment</div>
                     <table role="presentation">
@@ -256,8 +258,9 @@ function renderTemplate(shipment) {
           <tr>
             <td style="padding:16px 34px 28px;text-align:center;">
               <div style="color:#9CA3AF;font-size:11.5px;line-height:1.8;">
-                <strong style="color:${NAVY};">CrossBordersDeliveries</strong> — leading logistics and distribution services<br />
-                No. 19/3 PK. 34810 Beykoz / Istanbul, Türkiye &bull; crossborder.delivery@outlook.com &bull; +90 806 055 2123<br />
+                <strong style="color:${NAVY};">${COMPANY.legal_name}</strong> — leading logistics and distribution services<br />
+                ${COMPANY.address} &bull; ${COMPANY.email}<br />
+                Fax: ${COMPANY.fax} &bull; Reg. No. ${COMPANY.reg_no} &bull; ${COMPANY.website}<br />
                 <span style="font-size:10.5px;">This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.</span>
               </div>
             </td>
@@ -277,9 +280,6 @@ export function fillTemplate(shipment) {
     .replaceAll('{{recipient_country}}', escapeHtml(shipment.recipient_country || '—'))
     .replaceAll('{{recipient_phone}}', escapeHtml(shipment.recipient_phone || '—'))
     .replaceAll('{{recipient_email}}', escapeHtml(shipment.recipient_email))
-    .replaceAll('{{sender_name}}', escapeHtml(shipment.sender_name))
-    .replaceAll('{{sender_phone}}', escapeHtml(shipment.sender_phone || '—'))
-    .replaceAll('{{sender_email}}', escapeHtml(shipment.sender_email))
     .replaceAll('{{cargo_type}}', escapeHtml(shipment.cargo_type || '—'))
     .replaceAll('{{package_weight}}', String(shipment.package_weight ?? 0))
     .replaceAll('{{package_quantity}}', String(shipment.package_quantity ?? 1))
@@ -373,10 +373,10 @@ async function sendViaBrevoApi({ to, subject, html, attachments }) {
   }
 
   const body = {
-    sender: { name: 'CrossBordersDeliveries', email: process.env.MAIL_FROM || 'crossborder.delivery@outlook.com' },
+    sender: { name: COMPANY.brand_name, email: process.env.MAIL_FROM || COMPANY.email },
     // Customers who hit "reply" write to this address — it does NOT need to be
     // verified in Brevo (only the sender does)
-    replyTo: { email: process.env.MAIL_REPLY_TO || 'crossborder.delivery@outlook.com' },
+    replyTo: { email: process.env.MAIL_REPLY_TO || COMPANY.email },
     to: [{ email: to }],
     subject,
     htmlContent: html,
@@ -395,40 +395,24 @@ async function sendViaBrevoApi({ to, subject, html, attachments }) {
   return data // { messageId, … }
 }
 
-// Compiles the PDF, renders the template, and sends via SMTP (with the brand
-// logo inline and the invoice attached). Falls back to a logged simulation
-// when SMTP env vars are absent.
-export async function sendShipmentEmail(shipment, admin) {
-  const to = shipment.recipient_email
-  const subject = `[${shipment.tracking_number}] Shipment ${shipment.current_status} — CrossBordersDeliveries`
-  const html = fillTemplate(shipment)
-
-  const mailFrom = process.env.MAIL_FROM || 'crossborder.delivery@outlook.com'
+// ─────────────────────────────────────────────────────────────────
+// Generic dispatch shared by every system email. Sender identity is
+// HARDCODED to the company constants — never taken from shipment data.
+// Prefers the Brevo HTTP API (HTTPS/443 — always open), falls back to
+// SMTP (ports 587 → 2525 → 465), then a logged simulation.
+// ─────────────────────────────────────────────────────────────────
+async function deliverMail({ to, subject, html, attachments = [], shipment, admin, label }) {
+  const mailFrom = process.env.MAIL_FROM || COMPANY.email
   // Display/reply address — does not need Brevo verification
-  const replyTo = process.env.MAIL_REPLY_TO || 'crossborder.delivery@outlook.com'
-
-  // Build the invoice attachment once (used by both send paths)
-  const invoicePdf = await new Promise((resolve, reject) => {
-    const chunks = []
-    const doc = buildInvoicePdf(shipment)
-    doc.on('data', (c) => chunks.push(c))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
-  })
-  const attachments = [
-    { filename: `${shipment.tracking_number}-invoice.pdf`, content: invoicePdf, contentType: 'application/pdf' },
-  ]
-  const logoExists = fs.existsSync(LOGO_PATH)
-  if (logoExists) {
-    attachments.push({ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID })
-  }
+  const replyTo = process.env.MAIL_REPLY_TO || COMPANY.email
+  const logoInline = fs.existsSync(LOGO_PATH) && html.includes(`cid:${LOGO_CID}`)
 
   // ── Preferred path: Brevo HTTP API (works when SMTP ports are blocked) ──
   if (process.env.BREVO_API_KEY) {
     try {
       // The API can't inline CID images — embed the logo as a base64 data URI instead
       let htmlApi = html
-      if (logoExists) {
+      if (logoInline) {
         htmlApi = html.replaceAll(
           `src="cid:${LOGO_CID}"`,
           `src="data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}"`,
@@ -436,7 +420,7 @@ export async function sendShipmentEmail(shipment, admin) {
       }
       await sendViaBrevoApi({ to, subject, html: htmlApi, attachments })
       await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
-      await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via Brevo API`)
+      await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via Brevo API`)
       return { sent: true, to, subject, message: 'Email sent via Brevo API (HTTPS).' }
     } catch (err) {
       console.error('[brevo-api] send failed:', err.message)
@@ -454,7 +438,7 @@ export async function sendShipmentEmail(shipment, admin) {
 
   try {
     const { port } = await sendViaSmtp({
-      from: `"CrossBordersDeliveries" <${mailFrom}>`,
+      from: `"${COMPANY.brand_name}" <${mailFrom}>`,
       replyTo,
       to,
       subject,
@@ -462,7 +446,7 @@ export async function sendShipmentEmail(shipment, admin) {
       attachments,
     })
     await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
-    await audit(admin, 'email.sent', 'shipment', String(shipment._id), `Invoice emailed to ${to} via SMTP port ${port}`)
+    await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via SMTP port ${port}`)
     return { sent: true, to, subject, message: `Email sent via SMTP (port ${port}).` }
   } catch (err) {
     const { SMTP_HOST } = process.env
@@ -476,4 +460,134 @@ export async function sendShipmentEmail(shipment, admin) {
     await audit(admin, 'email.failed', 'shipment', String(shipment._id), `${err.code || 'error'}: ${String(err.message).slice(0, 200)}`)
     return { sent: false, error: err.message, to, subject, message: `SMTP send failed (${err.code || 'error'})${hint}` }
   }
+}
+
+// Status/progress email — invoice PDF attached, logo inline.
+export async function sendShipmentEmail(shipment, admin) {
+  const to = shipment.recipient_email
+  const subject = `[${shipment.tracking_number}] Shipment ${shipment.current_status} — ${COMPANY.brand_name}`
+  const html = fillTemplate(shipment)
+
+  // Build the invoice attachment once (used by both send paths)
+  const doc = await buildInvoicePdf(shipment)
+  const invoicePdf = await new Promise((resolve, reject) => {
+    const chunks = []
+    doc.on('data', (c) => chunks.push(c))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
+  })
+  const attachments = [
+    { filename: `${shipment.tracking_number}-invoice.pdf`, content: invoicePdf, contentType: 'application/pdf' },
+  ]
+  if (fs.existsSync(LOGO_PATH)) {
+    attachments.push({ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID })
+  }
+
+  return deliverMail({ to, subject, html, attachments, shipment, admin, label: 'Invoice/status email' })
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CONFIRMATION LETTER — exact formal letter format.
+// The letterhead (company name, address, fax, reg. no, email, website),
+// the body wording and the signature block are HARDCODED. Only the date
+// (always current), the reference/tracking number and the recipient
+// details vary per shipment.
+// ─────────────────────────────────────────────────────────────────
+export function renderConfirmationLetter(shipment) {
+  const date = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  const name = escapeHtml(shipment.recipient_name || '—')
+  const address = escapeHtml(shipment.recipient_address || '—')
+  const emailAddr = escapeHtml(shipment.recipient_email || '—')
+  const phone = escapeHtml(shipment.recipient_phone || '—')
+  const reference = escapeHtml(shipment.tracking_number)
+  const origin = escapeHtml(shipment.origin_city || '—')
+  const destination = escapeHtml(shipment.destination_city || '—')
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#EEF1F6;font-family:Georgia,'Times New Roman',Times,serif;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF1F6;padding:28px 12px;">
+      <tr><td align="center">
+        <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(3,20,53,0.12);">
+
+          <!-- ═══ Letterhead (HARDCODED — not editable) ═══ -->
+          <tr>
+            <td style="padding:36px 42px 0;text-align:center;">
+              <div style="font-size:23px;font-weight:bold;color:${NAVY};letter-spacing:1.4px;">${COMPANY.legal_name}</div>
+              <div style="width:130px;height:3px;background:${BRAND_RED};margin:12px auto 16px;"></div>
+              <div style="font-size:12.5px;color:#374151;line-height:1.75;font-family:Arial,Helvetica,sans-serif;">
+                ${COMPANY.address}<br />
+                Fax: ${COMPANY.fax}<br />
+                Reg. No. ${COMPANY.reg_no}<br />
+                Email: ${COMPANY.email}<br />
+                Website: ${COMPANY.website}
+              </div>
+            </td>
+          </tr>
+          <tr><td style="padding:0 42px;"><div style="border-bottom:1px solid #D7DBE3;font-size:0;line-height:0;">&nbsp;</div></td></tr>
+
+          <!-- ═══ Date — always current ═══ -->
+          <tr>
+            <td style="padding:16px 42px 0;font-size:13.5px;color:#374151;font-family:Arial,Helvetica,sans-serif;">
+              Date: <strong style="color:${NAVY};">${date}</strong>
+            </td>
+          </tr>
+
+          <!-- ═══ Letter body — exact wording ═══ -->
+          <tr>
+            <td style="padding:20px 42px 36px;font-size:14.5px;color:#1F2937;line-height:1.85;">
+              <p style="margin:0 0 20px;">Dear ${name}</p>
+
+              <p style="margin:0 0 20px;font-size:16.5px;font-weight:bold;color:${NAVY};text-align:center;letter-spacing:0.3px;">Official Notification of Incoming Shipment</p>
+
+              <p style="margin:0 0 4px;">Reference Number: <strong style="color:${NAVY};">${reference}</strong></p>
+              <p style="margin:0 0 18px;">Shipment Origin and Destination: ${origin} to ${destination}.</p>
+
+              <p style="margin:0 0 14px;">Cross Borders Deliveries is pleased to inform you that a consignment has been received and is scheduled for delivery to your registered residential address.</p>
+
+              <p style="margin:0 0 10px;">To proceed with the dispatch, we kindly request your confirmation that the following details are accurate:</p>
+
+              <ul style="margin:0 0 16px;padding-left:24px;">
+                <li style="margin:0 0 7px;"><strong>Full Name:</strong> ${name}</li>
+                <li style="margin:0 0 7px;"><strong>Delivery Address:</strong> ${address}</li>
+                <li style="margin:0 0 7px;"><strong>Email Address:</strong> ${emailAddr}</li>
+                <li style="margin:0 0 7px;"><strong>Telephone Number:</strong> ${phone}</li>
+              </ul>
+
+              <p style="margin:0 0 16px;">Upon verification of the above information, we will promptly arrange for the shipment to your address.</p>
+
+              <p style="margin:0 0 16px;"><strong>Important Requirement:</strong><br />
+                Due to security protocols and the high-value nature of this consignment, the recipient must present a form of government-issued identification at the time of delivery for verification purposes. Failure to provide such identification may result in the package being withheld or returned.</p>
+
+              <p style="margin:0 0 16px;">We kindly request that you contact us at your earliest convenience to confirm the dispatch and release of the shipment. Your prompt response will help us avoid any delays and ensure a high standard of service.</p>
+
+              <p style="margin:0 0 16px;">Should you have any questions or require further assistance, please do not hesitate to contact our support team. We operate 24 hours a day, 7 days a week.</p>
+
+              <p style="margin:0 0 26px;">Thank you for choosing Cross Borders Deliveries.</p>
+
+              <p style="margin:0;">Yours sincerely,<br /><br />
+                <strong>${COMPANY.signatory}</strong><br />
+                ${COMPANY.signatory_title}</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`
+}
+
+// Confirmation letter — sent from the admin's "Send Confirmation" button.
+// Recipient details come from the admin's receiver-only form; everything
+// else (letterhead, signature, date) is fixed server-side.
+export async function sendConfirmationEmail(shipment, admin) {
+  const to = shipment.recipient_email
+  const subject = `Official Notification of Incoming Shipment — ${shipment.tracking_number}`
+  const html = renderConfirmationLetter(shipment)
+  return deliverMail({ to, subject, html, attachments: [], shipment, admin, label: 'Confirmation letter' })
 }

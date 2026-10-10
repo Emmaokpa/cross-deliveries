@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from './api.js'
-import { Badge, Field, Modal, Progress, EmptyState, fmtMoney, fmtDate, useToast } from './components.jsx'
+import { Badge, Field, Modal, Progress, EmptyState, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
 import { CURRENCIES } from './currencies.js'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
 const EMPTY_FORM = {
-  sender_name: '', sender_email: '', sender_phone: '', sender_address: '',
   recipient_name: '', recipient_email: '', recipient_phone: '', recipient_address: '',
   recipient_city: '', recipient_country: '', origin_city: '', destination_city: '',
   cargo_type: 'Air', package_weight: '', package_dimensions: '', package_quantity: 1, package_description: '',
@@ -160,15 +159,9 @@ export default function Shipments() {
         >
           {error && <div className="alert-a alert-error">{error}</div>}
           <form onSubmit={create}>
-            <h4 style={{ color: 'var(--a-navy)', margin: '0 0 10px' }}>Sender</h4>
-            <div className="form-grid">
-              <Field label="Name" required><input value={form.sender_name} onChange={setF('sender_name')} required /></Field>
-              <Field label="Email" required><input type="email" value={form.sender_email} onChange={setF('sender_email')} required /></Field>
-              <Field label="Phone"><input value={form.sender_phone} onChange={setF('sender_phone')} /></Field>
-              <Field label="Address"><input value={form.sender_address} onChange={setF('sender_address')} /></Field>
-            </div>
+            <SenderInfo />
 
-            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Recipient</h4>
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver details (editable)</h4>
             <div className="form-grid">
               <Field label="Name" required><input value={form.recipient_name} onChange={setF('recipient_name')} required /></Field>
               <Field label="Email" required><input type="email" value={form.recipient_email} onChange={setF('recipient_email')} required /></Field>
