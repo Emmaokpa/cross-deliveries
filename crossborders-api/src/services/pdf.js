@@ -4,12 +4,23 @@ import fs from 'node:fs'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 import { COMPANY } from './company.js'
 
-const BRAND_RED = '#E30613'
+// ─────────────────────────────────────────────────────────────────
+// UNIFIED DARK THEME — mirrors the email templates (services/email.js)
+// exactly: dark outer background, the light brand banner letterhead,
+// the navy highlight bar, coral company details and blue underlined
+// links. HARDCODED brand assets — never editable from the admin UI.
+// ─────────────────────────────────────────────────────────────────
+const DARK_BG = '#0F1117'
+const DARK_PANEL = '#1A1D24'
+const DARK_LINE = '#2A2E38'
+const CORAL = '#EE6044'
+const BLUE = '#4A90E2'
 const NAVY = '#031435'
-const GREY = '#6B7280'
-const LINE = '#E3E7EE'
-const CARD_BG = '#F6F7F9'
-const ZEBRA = '#F6F7F9'
+const WHITE = '#FFFFFF'
+const OFF_WHITE = '#D6DAE3'
+const MUTED = '#9AA1AE'
+const DIM = '#7A8290'
+const BODY = '#AEB6C4'
 
 // PDF core fonts (Helvetica) lack most currency glyphs (₦, ₩, ₹…), so amounts
 // always print with the ISO code prefix, e.g. "NGN 12,500.00" / "KRW 1,250,000".
@@ -31,6 +42,12 @@ const pdfText = (s) => String(s ?? '').replace(/İ/g, 'I')
 
 export async function buildInvoicePdf(shipment) {
   const doc = new PDFDocument({ size: 'A4', margin: M })
+
+  // Every page (including auto-added overflow pages) gets the dark background
+  const paintBackground = () => doc.rect(0, 0, doc.page.width, doc.page.height).fill(DARK_BG)
+  paintBackground()
+  doc.on('pageAdded', paintBackground)
+
   await drawLetterhead(doc, shipment)
   titleBlock(doc, shipment)
   partyCards(doc, shipment)
@@ -40,7 +57,7 @@ export async function buildInvoicePdf(shipment) {
   // Footer — kept as short single lines and clear of the bottom margin:
   // a long line used to wrap past the margin and make pdfkit append blank
   // extra pages ("Page 1 of 1" ended up alone on page 3).
-  doc.fontSize(8).fillColor(GREY)
+  doc.fontSize(8).fillColor(DIM)
   doc.text(
     'CrossBordersDeliveries.com — leading logistics and distribution services.',
     M,
@@ -53,76 +70,97 @@ export async function buildInvoicePdf(shipment) {
     doc.page.height - 72,
     { width: doc.page.width - M * 2, align: 'center', lineBreak: false },
   )
-  doc.fontSize(7.5).fillColor('#9AA3B2')
+  doc.fontSize(7.5).fillColor('#5A6272')
   doc.text(`Page 1 of 1`, M, doc.page.height - 60, { width: doc.page.width - M * 2, align: 'center', lineBreak: false })
   doc.end()
   return doc
 }
 
 async function drawLetterhead(doc, shipment) {
-  // Header band — HARDCODED company letterhead (never editable)
-  doc.rect(0, 0, doc.page.width, 104).fill(NAVY)
-  doc.rect(0, 104, doc.page.width, 4).fill(BRAND_RED)
+  const W = doc.page.width
 
-  // Brand logo (white card behind it since the PNG has transparent background)
+  // ── Brand banner (HARDCODED) — light/gradient strip with the red-and-dark
+  //    "X" logo mark on the left and the bold brand name to its right ──
+  const banner = doc.linearGradient(0, 0, W, 84)
+  banner.stop(0, '#FFFFFF').stop(1, '#E2E8F2')
+  doc.rect(0, 0, W, 84).fill(banner)
+
   if (fs.existsSync(LOGO_PATH)) {
-    doc.save()
-    doc.roundedRect(doc.page.width - 160, 8, 90, 40, 8).fill('#FFFFFF')
     try {
-      doc.image(LOGO_PATH, doc.page.width - 152, 13, { fit: [74, 30], align: 'center', valign: 'center' })
+      doc.image(LOGO_PATH, M, 19, { fit: [80, 46], align: 'left', valign: 'center' })
     } catch {
       /* logo optional */
     }
-    doc.restore()
   }
 
-  // QR code under the logo, linking to public tracking
-  // (toBuffer returns a Promise — it must be awaited or doc.image throws)
+  doc.font('Helvetica-Bold').fontSize(19)
+  doc.fillColor(NAVY).text('Cross Borders ', M + 92, 25, { continued: true, lineBreak: false })
+  doc.fillColor(CORAL).text('Deliveries', { lineBreak: false })
+  doc.font('Helvetica').fontSize(6.8).fillColor('#5B6478')
+  doc.text('GLOBAL LOGISTICS & COURIER SERVICES', M + 92, 50, { characterSpacing: 1.5, lineBreak: false })
+
+  // QR code — scan to track (top-right of the banner)
   try {
     const qr = await QRCode.toBuffer(TRACKING_URL(shipment.tracking_number), { width: 220, margin: 0, color: { dark: NAVY, light: '#FFFFFF' } })
-    doc.image(qr, doc.page.width - 135, 52, { width: 40, height: 40 })
-    doc.fontSize(6).fillColor('#B9C2D8').text('SCAN TO TRACK', doc.page.width - 147, 94, { width: 64, align: 'center' })
+    doc.roundedRect(W - M - 52, 12, 52, 52, 6).fill('#FFFFFF')
+    doc.image(qr, W - M - 46, 18, { width: 40, height: 40 })
+    doc.fontSize(5.5).fillColor('#5B6478').text('SCAN TO TRACK', W - M - 52, 60, { width: 52, align: 'center', lineBreak: false })
   } catch {
     /* QR optional */
   }
 
-  // Logo mark (starburst-inspired)
-  const cx = 60
-  const cy = 46
-  doc.circle(cx, cy, 5).fill(BRAND_RED)
-  doc.moveTo(cx, cy - 20).lineTo(cx, cy - 11).lineWidth(2).strokeColor(BRAND_RED).stroke()
-  doc.moveTo(cx, cy + 11).lineTo(cx, cy + 20).strokeColor('#FFFFFF').stroke()
-  doc.moveTo(cx - 20, cy).lineTo(cx - 11, cy).strokeColor('#FFFFFF').stroke()
-  doc.moveTo(cx + 11, cy).lineTo(cx + 20, cy).strokeColor(BRAND_RED).stroke()
+  // ── Navy highlight bar with the HARDCODED legal name ──
+  doc.rect(0, 84, W, 26).fill(NAVY)
+  doc.font('Helvetica-Bold').fontSize(11.5).fillColor(WHITE)
+  doc.text(COMPANY.legal_name, 0, 92, { width: W, align: 'center', characterSpacing: 1.8, lineBreak: false })
 
-  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(16)
-  doc.text(COMPANY.legal_name, 92, 16)
-  doc.font('Helvetica').fontSize(7.5).fillColor('#B9C2D8')
-  doc.text('GLOBAL LOGISTICS & COURIER SERVICES  •  AIR  •  OCEAN  •  ROAD', 92, 37)
-  doc.fontSize(7).fillColor('#DCE3F0')
-  doc.text(pdfText(COMPANY.address), 92, 51)
-  doc.text(`Fax: ${COMPANY.fax}  •  Reg. No. ${COMPANY.reg_no}`, 92, 64)
-  doc.text(`Email: ${COMPANY.email}  •  Website: ${COMPANY.website}`, 92, 77)
+  // ── HARDCODED company details in coral ──
+  const y0 = 122
+  doc.font('Helvetica').fontSize(8).fillColor(CORAL)
+  doc.text(`${pdfText(COMPANY.address)},`, M, y0, { lineBreak: false })
+  doc.text(`Fax: ${COMPANY.fax},`, M, y0 + 12, { lineBreak: false })
+  doc.text(`Reg. No. ${COMPANY.reg_no},`, M, y0 + 24, { lineBreak: false })
+
+  // Email + website — bright blue, underlined, clickable
+  const emailTxt = `Email: ${COMPANY.email}`
+  doc.fillColor(BLUE).text(emailTxt, M, y0 + 36, { lineBreak: false })
+  doc.underline(M, y0 + 36, doc.widthOfString(emailTxt), 9, { color: BLUE })
+  doc.link(M, y0 + 36, doc.widthOfString(emailTxt), 9, `mailto:${COMPANY.email}`)
+
+  const webTxt = `Website: ${COMPANY.website}`
+  doc.fillColor(BLUE).text(webTxt, M + 180, y0 + 36, { lineBreak: false })
+  doc.underline(M + 180, y0 + 36, doc.widthOfString(webTxt), 9, { color: BLUE })
+  doc.link(M + 180, y0 + 36, doc.widthOfString(webTxt), 9, `https://${COMPANY.website}`)
+
+  // Date — always current, italicized coral
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(CORAL)
+  doc.text(`Date: ${today}`, W - M - 200, y0, { width: 200, align: 'right', lineBreak: false })
+  doc.font('Helvetica')
+
+  const ruleY = y0 + 52
+  doc.moveTo(M, ruleY).lineTo(W - M, ruleY).lineWidth(1).strokeColor(DARK_LINE).stroke()
+  doc.y = ruleY + 12
 }
 
 // Compact, aligned title row: left = document type + current date, right = tracking
 function titleBlock(doc, shipment) {
-  const y = 124
-  doc.font('Helvetica-Bold').fontSize(14).fillColor(NAVY)
+  const y = doc.y
+  doc.font('Helvetica-Bold').fontSize(14).fillColor(WHITE)
   doc.text('COMMERCIAL INVOICE / WAYBILL', M, y, { characterSpacing: 0.5, lineBreak: false })
 
   // Date — always the current date, never stored or editable
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  doc.font('Helvetica').fontSize(8.5).fillColor(GREY)
+  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED)
   doc.text(`Date: ${today}`, M, y + 15, { lineBreak: false })
 
-  doc.font('Helvetica').fontSize(8.5).fillColor(GREY)
+  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED)
   doc.text('Tracking Number:', doc.page.width - M - 190, y, { width: 190, align: 'right', lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(BRAND_RED)
+  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(CORAL)
   doc.text(shipment.tracking_number, doc.page.width - M - 190, y + 13, { width: 190, align: 'right', lineBreak: false })
 
   const ruleY = y + 34
-  doc.moveTo(M, ruleY).lineTo(doc.page.width - M, ruleY).lineWidth(1).strokeColor(LINE).stroke()
+  doc.moveTo(M, ruleY).lineTo(doc.page.width - M, ruleY).lineWidth(1).strokeColor(DARK_LINE).stroke()
   doc.y = ruleY + 12
 }
 
@@ -153,17 +191,17 @@ function partyCards(doc, shipment) {
 
 function partyCard(doc, heading, y, w, lines, x = M) {
   const h = 130
-  doc.roundedRect(x, y, w, h, 6).fill(CARD_BG)
-  doc.roundedRect(x, y, w, h, 6).lineWidth(1).strokeColor(LINE).stroke()
+  doc.roundedRect(x, y, w, h, 6).fill(DARK_PANEL)
+  doc.roundedRect(x, y, w, h, 6).lineWidth(1).strokeColor(DARK_LINE).stroke()
 
   const pad = 12
-  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(BRAND_RED)
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(CORAL)
   doc.text(heading, x + pad, y + pad, { characterSpacing: 1.2, lineBreak: false })
 
-  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(NAVY)
+  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(WHITE)
   doc.text(String(lines[0] || ''), x + pad, y + pad + 14, { width: w - pad * 2, height: 16, ellipsis: true })
 
-  doc.font('Helvetica').fontSize(8).fillColor(GREY)
+  doc.font('Helvetica').fontSize(8).fillColor(BODY)
   const body = lines.slice(1).filter(Boolean)
   doc.text(body.join('\n'), x + pad, y + pad + 34, { width: w - pad * 2, height: h - pad - 42, ellipsis: true, lineGap: 2 })
 }
@@ -190,37 +228,37 @@ function metaGrid(doc, shipment) {
   const ch = 44
   const startY = doc.y
 
-  doc.font('Helvetica').fontSize(6.5).fillColor(GREY)
+  doc.font('Helvetica').fontSize(6.5).fillColor(MUTED)
   doc.text('SHIPMENT DETAILS', M, startY, { characterSpacing: 1.2, lineBreak: false })
   const gridY = startY + 14
 
-  cells.forEach(([label, value], i) => {
+  cells.forEach((_, i) => {
     const x = M + (i % cols) * cw
     const y = gridY + Math.floor(i / cols) * ch
-    doc.rect(x, y, cw, ch).lineWidth(1).strokeColor(LINE).stroke()
-    // fill after stroke would hide borders — draw bg first per cell instead
+    doc.rect(x, y, cw, ch).lineWidth(1).strokeColor(DARK_LINE).stroke()
+    // fill after stroke would hide borders — the page background shows through instead
   })
 
   cells.forEach(([label, value], i) => {
     const x = M + (i % cols) * cw
     const y = gridY + Math.floor(i / cols) * ch
-    doc.font('Helvetica').fontSize(6.5).fillColor(GREY)
+    doc.font('Helvetica').fontSize(6.5).fillColor(MUTED)
     doc.text(label, x + 8, y + 7, { characterSpacing: 0.8, lineBreak: false })
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(NAVY)
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(WHITE)
     doc.text(String(value), x + 8, y + 19, { width: cw - 16, height: 18, ellipsis: true })
   })
 
   // Estimated delivery strip under the grid
   const stripY = gridY + rows * ch
-  doc.rect(M, stripY, PW(), 26).fillColor(CARD_BG).fill()
-  doc.rect(M, stripY, PW(), 26).lineWidth(1).strokeColor(LINE).stroke()
-  doc.font('Helvetica').fontSize(6.5).fillColor(GREY)
+  doc.rect(M, stripY, PW(), 26).fillColor('#161A21').fill()
+  doc.rect(M, stripY, PW(), 26).lineWidth(1).strokeColor(DARK_LINE).stroke()
+  doc.font('Helvetica').fontSize(6.5).fillColor(MUTED)
   doc.text('ESTIMATED DELIVERY', M + 8, stripY + 5, { characterSpacing: 0.8, lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(NAVY)
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(WHITE)
   doc.text(eta, M + 8, stripY + 15, { lineBreak: false })
-  doc.font('Helvetica').fontSize(6.5).fillColor(GREY)
+  doc.font('Helvetica').fontSize(6.5).fillColor(MUTED)
   doc.text('CURRENCY', M + 220, stripY + 5, { characterSpacing: 0.8, lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(NAVY)
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(WHITE)
   doc.text((shipment.currency || 'NGN').toUpperCase(), M + 220, stripY + 15, { lineBreak: false })
 
   doc.y = stripY + 26 + 16
@@ -232,12 +270,17 @@ function pricingTable(doc, shipment) {
   const cur = (shipment.currency || 'NGN').toUpperCase()
   doc.moveDown(0.5)
 
+  // Every row is positioned from an explicit `y` cursor: doc.text() advances
+  // doc.y by the text height, which used to drift the table down until it
+  // spilled onto a phantom second page.
+  let y = doc.y
+
   // Header band
-  doc.rect(x0, doc.y, width, 22).fill(NAVY)
-  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(8.5)
-  doc.text('DESCRIPTION', x0 + 12, doc.y + 7, { characterSpacing: 0.8, lineBreak: false })
-  doc.text(`AMOUNT (${cur})`, x0 + width - 130, doc.y + 7, { width: 118, align: 'right', lineBreak: false })
-  doc.y += 22
+  doc.rect(x0, y, width, 22).fill(NAVY)
+  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(8.5)
+  doc.text('DESCRIPTION', x0 + 12, y + 7, { characterSpacing: 0.8, lineBreak: false })
+  doc.text(`AMOUNT (${cur})`, x0 + width - 130, y + 7, { width: 118, align: 'right', lineBreak: false })
+  y += 22
 
   const rows = [
     ['Base Freight Charges', shipment.base_freight],
@@ -245,29 +288,29 @@ function pricingTable(doc, shipment) {
     ['Customs & Handling', shipment.surcharge_customs],
   ]
   rows.forEach(([label, amount], i) => {
-    if (i % 2 === 0) doc.rect(x0, doc.y, width, 22).fill(ZEBRA)
-    doc.rect(x0, doc.y, width, 22).lineWidth(1).strokeColor(LINE).stroke()
-    doc.fillColor('#111827').font('Helvetica').fontSize(9.5)
-    doc.text(label, x0 + 12, doc.y + 7, { lineBreak: false })
-    doc.font('Helvetica-Bold')
-    doc.text(money(amount, cur), x0 + width - 130, doc.y + 7, { width: 118, align: 'right', lineBreak: false })
-    doc.y += 22
+    if (i % 2 === 0) doc.rect(x0, y, width, 22).fill('#181C23')
+    doc.rect(x0, y, width, 22).lineWidth(1).strokeColor(DARK_LINE).stroke()
+    doc.fillColor(OFF_WHITE).font('Helvetica').fontSize(9.5)
+    doc.text(label, x0 + 12, y + 7, { lineBreak: false })
+    doc.font('Helvetica-Bold').fillColor(WHITE)
+    doc.text(money(amount, cur), x0 + width - 130, y + 7, { width: 118, align: 'right', lineBreak: false })
+    y += 22
   })
 
   // Total row
-  doc.rect(x0, doc.y, width, 26).fill('#EDEFF3')
-  doc.rect(x0, doc.y, width, 26).lineWidth(1).strokeColor(LINE).stroke()
-  doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(10.5)
-  doc.text('TOTAL COST', x0 + 12, doc.y + 8, { characterSpacing: 0.8, lineBreak: false })
-  doc.text(money(shipment.total_cost || 0, cur), x0 + width - 130, doc.y + 8, { width: 118, align: 'right', lineBreak: false })
-  doc.y += 26 + 12
+  doc.rect(x0, y, width, 26).fill('#202430')
+  doc.rect(x0, y, width, 26).lineWidth(1).strokeColor(DARK_LINE).stroke()
+  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(10.5)
+  doc.text('TOTAL COST', x0 + 12, y + 8, { characterSpacing: 0.8, lineBreak: false })
+  doc.text(money(shipment.total_cost || 0, cur), x0 + width - 130, y + 8, { width: 118, align: 'right', lineBreak: false })
+  y += 26 + 12
 
   // Payment status banner
   const paid = shipment.payment_status === 'Paid'
-  const bannerColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : BRAND_RED
+  const bannerColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : CORAL
   const label = paid ? 'PAID' : shipment.payment_status === 'Pending' ? 'PAYMENT PENDING' : 'UNPAID'
-  doc.rect(x0, doc.y, width, 28).fill(bannerColor)
-  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(12)
-  doc.text(label, x0, doc.y + 8, { width, align: 'center', lineBreak: false })
-  doc.y += 28
+  doc.rect(x0, y, width, 28).fill(bannerColor)
+  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(12)
+  doc.text(label, x0, y + 8, { width, align: 'center', lineBreak: false })
+  doc.y = y + 28
 }

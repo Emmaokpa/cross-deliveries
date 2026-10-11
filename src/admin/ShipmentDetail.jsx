@@ -214,9 +214,10 @@ export default function ShipmentDetail() {
     }
   }
 
-  // Confirmation letter — receiver-only form. Sender/letterhead/signature are
-  // hardcoded server-side, the date is always current, and the reference
-  // number is this shipment's tracking number.
+  // Confirmation letter — recipient-only form. The letterhead banner, company
+  // details, contact numbers and signature are hardcoded server-side, the date
+  // is always current, and the reference number is this shipment's tracking
+  // number (locked). Only recipient-specific fields below are editable.
   const openConf = () => {
     setConfForm({
       recipient_name: s.recipient_name || '',
@@ -225,6 +226,8 @@ export default function ShipmentDetail() {
       recipient_address: s.recipient_address || '',
       recipient_city: s.recipient_city || '',
       recipient_country: s.recipient_country || '',
+      origin_city: s.origin_city || '',
+      destination_city: s.destination_city || '',
     })
     setConfOpen(true)
   }
@@ -795,18 +798,26 @@ export default function ShipmentDetail() {
                 lineHeight: 1.6,
               }}
             >
-              <strong>Official Notification of Incoming Shipment.</strong> The letterhead, sender block and
-              signature are hardcoded; the date is always today (
+              <strong>Official Notification of Incoming Shipment.</strong> The letterhead banner, company
+              details, contact numbers and signature are hardcoded and locked; the date is always today (
               <strong>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>
-              ) and the reference number is <strong>{s.tracking_number}</strong>. Only the receiver details
-              below can be edited.
+              ). Only the recipient-specific fields below are editable — the reference number is always
+              this shipment's tracking number.
             </div>
             <SenderInfo />
-            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver details (editable)</h4>
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Reference &amp; route</h4>
+            <div className="form-grid">
+              <Field label="Reference number (locked)">
+                <input value={s.tracking_number} readOnly disabled title="The reference number is always this shipment's tracking number" />
+              </Field>
+              <Field label="Shipment origin"><input value={confForm.origin_city} onChange={setC('origin_city')} placeholder="e.g. Amsterdam" /></Field>
+              <Field label="Shipment destination"><input value={confForm.destination_city} onChange={setC('destination_city')} placeholder="e.g. Texas" /></Field>
+            </div>
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Recipient details (editable)</h4>
             <div className="form-grid">
               <Field label="Full name" required><input value={confForm.recipient_name} onChange={setC('recipient_name')} required /></Field>
-              <Field label="Email" required><input type="email" value={confForm.recipient_email} onChange={setC('recipient_email')} required /></Field>
-              <Field label="Telephone"><input value={confForm.recipient_phone} onChange={setC('recipient_phone')} /></Field>
+              <Field label="Email address" required><input type="email" value={confForm.recipient_email} onChange={setC('recipient_email')} required /></Field>
+              <Field label="Telephone number"><input value={confForm.recipient_phone} onChange={setC('recipient_phone')} /></Field>
               <Field label="Delivery address"><input value={confForm.recipient_address} onChange={setC('recipient_address')} /></Field>
               <Field label="City"><input value={confForm.recipient_city} onChange={setC('recipient_city')} /></Field>
               <Field label="Country"><input value={confForm.recipient_country} onChange={setC('recipient_country')} /></Field>

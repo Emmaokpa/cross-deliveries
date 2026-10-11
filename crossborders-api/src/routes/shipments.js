@@ -470,10 +470,11 @@ router.get('/shipments/:id/email.html', async (req, res) => {
 })
 
 // POST /api/v1/shipments/:id/send-confirmation — the admin's "Send Confirmation
-// Letter" button. The body carries ONLY receiver details typed by the admin
-// (name, email, phone, address, city, country). The letterhead, sender block,
-// signature and date are hardcoded server-side; the reference number is always
-// this shipment's tracking number.
+// Letter" button. The body carries ONLY recipient-specific details typed by the
+// admin (full name, email, phone, delivery address, city, country and the
+// origin/destination route). The letterhead, banner, sender block, contact
+// numbers and signature are hardcoded server-side; the reference number is
+// always this shipment's tracking number and cannot be overridden.
 router.post('/shipments/:id/send-confirmation', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
@@ -496,6 +497,10 @@ router.post('/shipments/:id/send-confirmation', async (req, res) => {
     shipment.recipient_address = pick('recipient_address', shipment.recipient_address)
     shipment.recipient_city = pick('recipient_city', shipment.recipient_city)
     shipment.recipient_country = pick('recipient_country', shipment.recipient_country)
+    // Origin → destination route shown on the letter (recipient-specific)
+    shipment.origin_city = pick('origin_city', shipment.origin_city)
+    shipment.destination_city = pick('destination_city', shipment.destination_city)
+    // Sender / company block is locked — always the hardcoded constants
     Object.assign(shipment, HARDCODED_SENDER)
     await shipment.save()
     await audit(req.admin, 'confirmation.sent', 'shipment', String(shipment._id), `Confirmation letter for ${shipment.tracking_number} → ${recipient_email}`)

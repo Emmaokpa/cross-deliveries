@@ -9,12 +9,25 @@ import { format as fmtMoney } from './currency.js'
 
 const LOGO_CID = 'cbd-logo'
 
-const BRAND_RED = '#E30613'
-const NAVY = '#031435'
-const NAVY_2 = '#0A2148'
-const MUTED = '#6B7280'
-const LIGHT = '#F6F7F9'
-const LINE = '#ECEEF3'
+// ─────────────────────────────────────────────────────────────────
+// UNIFIED DARK THEME — shared by EVERY system email (confirmation
+// letter, status/invoice email) and mirrored by the invoice PDF so
+// the whole brand experience is identical. These colors, the banner
+// letterhead, the logo asset and the sign-off are HARDCODED brand
+// assets: they are NOT editable from the admin UI or the API.
+// ─────────────────────────────────────────────────────────────────
+const DARK_BG = '#0F1117'    // outer wrapper background
+const DARK_CARD = '#121212'  // message container
+const DARK_PANEL = '#1A1D24' // inner cards / rows / boxes
+const DARK_LINE = '#2A2E38'  // hairline dividers & borders
+const CORAL = '#EE6044'      // brand accent (company details, highlights)
+// (#E86C53 is the secondary coral shade used for gradients/variants)
+const BLUE = '#4A90E2'       // clickable links / phone numbers
+const NAVY = '#031435'       // highlight bar behind the legal name
+const WHITE = '#FFFFFF'
+const OFF_WHITE = '#D6DAE3'  // general body text
+const MUTED = '#9AA1AE'      // labels
+const DIM = '#7A8290'        // footnotes / footers
 
 function fmt(n, code) {
   return fmtMoney(n, code)
@@ -27,15 +40,117 @@ function fmtDate(d) {
   return dt.toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+function escapeHtml(s = '') {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
 // ─────────────────────────────────────────────────────────────────
-// Professional letterhead email template
+// LETTERHEAD — HARDCODED. The official logo (assets/logo.png, the
+// red-and-dark stylized "X" mark) is embedded as a data URI so the
+// banner renders identically in every email client, browser preview
+// and PDF export. Falls back to the CID image if the asset is absent.
+// ─────────────────────────────────────────────────────────────────
+let logoDataUriCache = null
+function logoSrc() {
+  if (logoDataUriCache === null) {
+    logoDataUriCache = fs.existsSync(LOGO_PATH)
+      ? `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}`
+      : `cid:${LOGO_CID}`
+  }
+  return logoDataUriCache
+}
+
+// Brand banner: light/gradient strip with the logo mark on the left and
+// the bold "Cross Borders Deliveries" lockup on the right.
+function brandBanner() {
+  return `
+          <!-- ═══ Brand banner (HARDCODED letterhead) ═══ -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#FFFFFF 0%,#EEF1F5 55%,#E2E8F2 100%);background-color:#F2F5FA;padding:13px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+                <td valign="middle" style="width:70px;">
+                  <img src="${logoSrc()}" alt="Cross Borders Deliveries" width="60" style="display:block;width:60px;height:auto;border:0;" />
+                </td>
+                <td valign="middle" style="padding-left:14px;">
+                  <div style="color:${NAVY};font-size:21px;font-weight:bold;letter-spacing:0.2px;">Cross Borders <span style="color:${CORAL};">Deliveries</span></div>
+                  <div style="color:#5B6478;font-size:9.5px;letter-spacing:2.2px;text-transform:uppercase;margin-top:3px;">Global Logistics &amp; Courier Services</div>
+                </td>
+              </tr></table>
+            </td>
+          </tr>`
+}
+
+// Dark shell: dark outer wrapper + clean dark container. Every system
+// template renders its content inside this block.
+function darkShell(inner, { width = 620 } = {}) {
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:${DARK_BG};font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_BG};padding:28px 12px;">
+      <tr><td align="center">
+        <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" style="max-width:${width}px;width:100%;background:${DARK_CARD};border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.55);">
+${brandBanner()}
+${inner}
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`
+}
+
+// ─────────────────────────────────────────────────────────────────
+// HARDCODED letterhead block shared by the letter & footer: navy
+// highlight bar with the legal name, then the company details in
+// coral (address, fax, reg. no) and bright blue underlined links
+// (email, website).
+// ─────────────────────────────────────────────────────────────────
+function letterheadDetails() {
+  return `
+          <!-- ═══ Letterhead details (HARDCODED — not editable) ═══ -->
+          <tr>
+            <td style="padding:0 28px;">
+              <div style="background:${NAVY};border-radius:8px;padding:9px 14px;margin-top:18px;text-align:center;">
+                <span style="color:${WHITE};font-size:15.5px;font-weight:bold;letter-spacing:1.8px;">${COMPANY.legal_name}</span>
+              </div>
+              <div style="text-align:center;font-size:12px;line-height:1.95;color:${CORAL};padding:13px 8px 0;">
+                ${escapeHtml(COMPANY.address)},<br />
+                Fax: ${escapeHtml(COMPANY.fax)},<br />
+                Reg. No. ${escapeHtml(COMPANY.reg_no)},<br />
+                Email: <a href="mailto:${COMPANY.email}" style="color:${BLUE};text-decoration:underline;">${escapeHtml(COMPANY.email)}</a>,<br />
+                Website: <a href="https://${COMPANY.website}" style="color:${BLUE};text-decoration:underline;">${escapeHtml(COMPANY.website)}</a>
+              </div>
+            </td>
+          </tr>
+          <tr><td style="padding:16px 28px 0;"><div style="height:1px;background:${DARK_LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>`
+}
+
+// Hardcoded footer strip — identical on every system email.
+function brandFooter(note) {
+  return `
+          <!-- ═══ Footer (HARDCODED) ═══ -->
+          <tr><td style="padding:22px 28px 0;"><div style="height:1px;background:${DARK_LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>
+          <tr>
+            <td style="padding:14px 28px 26px;text-align:center;">
+              <div style="color:${DIM};font-size:11.5px;line-height:1.9;font-family:Arial,Helvetica,sans-serif;">
+                <strong style="color:${CORAL};">${COMPANY.legal_name}</strong> — leading logistics and distribution services<br />
+                ${escapeHtml(COMPANY.address)} &bull; Fax: ${escapeHtml(COMPANY.fax)}<br />
+                Reg. No. ${escapeHtml(COMPANY.reg_no)} &bull; ${escapeHtml(COMPANY.email)} &bull; ${escapeHtml(COMPANY.website)}<br />
+                <span style="font-size:10.5px;">${note}</span>
+              </div>
+            </td>
+          </tr>`
+}
+
+// ─────────────────────────────────────────────────────────────────
+// STATUS / INVOICE EMAIL — dark theme, same letterhead & container
+// as the confirmation letter.
 // ─────────────────────────────────────────────────────────────────
 function renderTemplate(shipment) {
   const cur = shipment.currency || 'NGN'
   const trackUrl = TRACKING_URL(shipment.tracking_number)
   const eta = fmtDate(shipment.estimated_delivery)
   const paid = shipment.payment_status === 'Paid'
-  const payColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : BRAND_RED
+  const payColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : CORAL
   const payLabel = paid ? 'PAID' : (shipment.payment_status || 'UNPAID').toUpperCase()
   const isDelivered = shipment.current_status === 'Delivered'
   const deliveredOn = fmtDate(shipment.delivered_at)
@@ -47,12 +162,12 @@ function renderTemplate(shipment) {
           <!-- ═══ Delivered banner ═══ -->
           <tr>
             <td style="padding:14px 34px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E9F6EE;border:2px solid #0E7A3D;border-radius:10px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0F2419;border:1px solid #1D6B41;border-radius:10px;">
                 <tr>
                   <td style="padding:16px 18px;text-align:center;">
-                    <div style="font-size:15px;font-weight:bold;color:#0E6B39;">&#10004; DELIVERED${deliveredOn ? ` — ${deliveredOn}` : ''}</div>
-                    ${receivedBy ? `<div style="font-size:12.5px;color:#2F6B4C;margin-top:5px;">Received by <strong>${escapeHtml(receivedBy)}</strong>${shipment.pod?.signed_at ? ' &bull; ' + fmtDate(shipment.pod.signed_at) : ''}</div>` : ''}
-                    <div style="font-size:11.5px;color:#6B8F7C;margin-top:4px;">Proof of delivery is on record with our operations team.</div>
+                    <div style="font-size:15px;font-weight:bold;color:#5FD48C;">&#10004; DELIVERED${deliveredOn ? ` — ${deliveredOn}` : ''}</div>
+                    ${receivedBy ? `<div style="font-size:12.5px;color:#8FBFA3;margin-top:5px;">Received by <strong>${escapeHtml(receivedBy)}</strong>${shipment.pod?.signed_at ? ' &bull; ' + fmtDate(shipment.pod.signed_at) : ''}</div>` : ''}
+                    <div style="font-size:11.5px;color:#6E9A83;margin-top:4px;">Proof of delivery is on record with our operations team.</div>
                   </td>
                 </tr>
               </table>
@@ -70,8 +185,8 @@ function renderTemplate(shipment) {
     .map(
       ([label, amount]) => `
                 <tr>
-                  <td style="padding:11px 16px;border-bottom:1px solid ${LINE};color:#4B5563;font-size:13.5px;">${label}</td>
-                  <td style="padding:11px 16px;border-bottom:1px solid ${LINE};color:#111827;font-size:13.5px;text-align:right;font-weight:600;">${amount}</td>
+                  <td style="padding:11px 16px;border-bottom:1px solid ${DARK_LINE};color:${OFF_WHITE};font-size:13.5px;">${label}</td>
+                  <td style="padding:11px 16px;border-bottom:1px solid ${DARK_LINE};color:${WHITE};font-size:13.5px;text-align:right;font-weight:600;">${amount}</td>
                 </tr>`,
     )
     .join('')
@@ -81,49 +196,18 @@ function renderTemplate(shipment) {
       ? `
                   <tr>
                     <td style="padding:3px 0;color:${MUTED};font-size:12.5px;white-space:nowrap;padding-right:14px;">${label}</td>
-                    <td style="padding:3px 0;color:#1F2937;font-size:13.5px;font-weight:500;">${value}</td>
+                    <td style="padding:3px 0;color:${OFF_WHITE};font-size:13.5px;font-weight:500;">${value}</td>
                   </tr>`
       : ''
 
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#EEF1F6;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF1F6;padding:28px 12px;">
-      <tr><td align="center">
-        <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(3,20,53,0.12);">
-
-          <!-- ═══ Letterhead ═══ -->
-          <tr>
-            <td style="background:${NAVY};padding:26px 34px;">
-              <table role="presentation" width="100%"><tr>
-                <td valign="middle">
-                  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                    <td valign="middle" style="padding-right:14px;">
-                      <div style="background:#FFFFFF;border-radius:10px;padding:6px;display:inline-block;">
-                        <img src="cid:${LOGO_CID}" alt="CrossBordersDeliveries" width="72" style="display:block;width:72px;height:auto;border:0;" />
-                      </div>
-                    </td>
-                    <td valign="middle">
-                      <div style="color:#FFFFFF;font-size:21px;font-weight:bold;letter-spacing:0.3px;font-family:Georgia,'Times New Roman',serif;">CrossBorders<span style="color:#FF5A6E;">Deliveries</span></div>
-                      <div style="color:#B9C2D8;font-size:10px;margin-top:4px;letter-spacing:2px;text-transform:uppercase;">Global Logistics &amp; Courier Services</div>
-                    </td>
-                  </tr></table>
-                </td>
-                <td align="right" valign="middle" style="color:#8FA0C4;font-size:11px;line-height:1.7;">
-                  Air &bull; Ocean &bull; Road<br />${COMPANY.website}
-                </td>
-              </tr></table>
-            </td>
-          </tr>
-          <tr><td style="height:4px;background:${BRAND_RED};font-size:0;line-height:0;">&nbsp;</td></tr>
-
+  const inner = `
           <!-- ═══ Greeting ═══ -->
           <tr>
-            <td style="padding:30px 34px 4px;">
-              <h1 style="margin:0 0 8px;font-size:21px;color:${NAVY};">Shipment Update: {{current_status}}</h1>
-              <p style="margin:0;color:${MUTED};font-size:14px;line-height:1.7;">
+            <td style="padding:26px 34px 4px;">
+              <h1 style="margin:0 0 8px;font-size:20px;color:${WHITE};">Shipment Update: {{current_status}}</h1>
+              <p style="margin:0;color:${OFF_WHITE};font-size:14px;line-height:1.7;">
                 Dear {{recipient_name}},<br />
-                Here is the latest status of your consignment with CrossBordersDeliveries. Keep your tracking number below — you can use it any time on our website to follow your delivery.
+                Here is the latest status of your consignment with Cross Borders Deliveries. Keep your tracking number below — you can use it any time on our website to follow your delivery.
               </p>
             </td>
           </tr>
@@ -131,10 +215,10 @@ function renderTemplate(shipment) {
           <!-- ═══ Tracking number — copy box ═══ -->
           <tr>
             <td style="padding:18px 34px 4px;">
-              <div style="border:2px dashed ${BRAND_RED};background:#FFF7F7;border-radius:10px;padding:14px 18px;text-align:center;">
+              <div style="border:2px dashed ${CORAL};background:${DARK_PANEL};border-radius:10px;padding:14px 18px;text-align:center;">
                 <div style="font-size:10px;color:${MUTED};letter-spacing:1.6px;text-transform:uppercase;margin-bottom:5px;">Your Tracking Number</div>
-                <div style="font-size:22px;font-weight:bold;color:${BRAND_RED};letter-spacing:1.5px;font-family:'Courier New',monospace;">{{tracking_number}}</div>
-                <div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Select &amp; copy this number to track your delivery</div>
+                <div style="font-size:22px;font-weight:bold;color:${CORAL};letter-spacing:1.5px;font-family:'Courier New',monospace;">{{tracking_number}}</div>
+                <div style="font-size:11px;color:${DIM};margin-top:6px;">Select &amp; copy this number to track your delivery</div>
               </div>
             </td>
           </tr>
@@ -142,25 +226,25 @@ function renderTemplate(shipment) {
           <!-- ═══ Status + progress card ═══ -->
           <tr>
             <td style="padding:14px 34px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LIGHT};border-radius:10px;border:1px solid ${LINE};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_PANEL};border-radius:10px;border:1px solid ${DARK_LINE};">
                 <tr>
                   <td style="padding:16px 18px;">
                     <table role="presentation" width="100%"><tr>
                       <td>
-                        <div style="font-size:10px;color:#8A93A6;letter-spacing:1.4px;text-transform:uppercase;">Current Status</div>
-                        <div style="font-size:16px;font-weight:bold;color:${NAVY};margin-top:3px;">{{current_status}}</div>
+                        <div style="font-size:10px;color:${MUTED};letter-spacing:1.4px;text-transform:uppercase;">Current Status</div>
+                        <div style="font-size:16px;font-weight:bold;color:${WHITE};margin-top:3px;">{{current_status}}</div>
                       </td>
                       <td align="right" valign="middle">
-                        <span style="display:inline-block;background:${NAVY};color:#FFFFFF;font-size:12px;font-weight:bold;padding:5px 14px;border-radius:999px;">{{progress_percentage}}% Complete</span>
+                        <span style="display:inline-block;background:${CORAL};color:${WHITE};font-size:12px;font-weight:bold;padding:5px 14px;border-radius:999px;">{{progress_percentage}}% Complete</span>
                       </td>
                     </tr></table>
-                    <div style="background:#E1E6EE;border-radius:6px;height:9px;margin-top:12px;">
-                      <div style="background:linear-gradient(90deg,${NAVY_2},${BRAND_RED});border-radius:6px;height:9px;width:{{progress_percentage}}%;"></div>
+                    <div style="background:#262A33;border-radius:6px;height:9px;margin-top:12px;">
+                      <div style="background:linear-gradient(90deg,#3C5AA6,${CORAL});border-radius:6px;height:9px;width:{{progress_percentage}}%;"></div>
                     </div>
                     <table role="presentation" width="100%" style="margin-top:14px;"><tr>
-                      <td style="color:${NAVY};font-weight:bold;font-size:13px;">{{origin_city}}</td>
-                      <td align="center" style="color:${BRAND_RED};font-size:15px;">&#10230;</td>
-                      <td align="right" style="color:${NAVY};font-weight:bold;font-size:13px;">{{destination_city}}</td>
+                      <td style="color:${WHITE};font-weight:bold;font-size:13px;">{{origin_city}}</td>
+                      <td align="center" style="color:${CORAL};font-size:15px;">&#10230;</td>
+                      <td align="right" style="color:${WHITE};font-weight:bold;font-size:13px;">{{destination_city}}</td>
                     </tr></table>
                   </td>
                 </tr>
@@ -173,10 +257,10 @@ function renderTemplate(shipment) {
             ? `<!-- ═══ ETA banner ═══ -->
           <tr>
             <td style="padding:14px 34px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E9F6EE;border:1px solid #CBE8D6;border-radius:10px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0F2419;border:1px solid #1D6B41;border-radius:10px;">
                 <tr>
-                  <td style="padding:12px 18px;color:#0E6B39;font-size:13.5px;">
-                    <strong>Estimated Delivery:</strong> ${eta}
+                  <td style="padding:12px 18px;color:#8FBFA3;font-size:13.5px;">
+                    <strong style="color:#5FD48C;">Estimated Delivery:</strong> ${eta}
                   </td>
                 </tr>
               </table>
@@ -190,7 +274,7 @@ function renderTemplate(shipment) {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td valign="top" style="width:50%;padding-right:8px;">
-                    <div style="font-size:11px;color:${BRAND_RED};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${BRAND_RED};padding-bottom:5px;margin-bottom:9px;">Recipient</div>
+                    <div style="font-size:11px;color:${CORAL};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${CORAL};padding-bottom:5px;margin-bottom:9px;">Recipient</div>
                     <table role="presentation">
                       ${detailRow('Name', '{{recipient_name}}')}
                       ${detailRow('Address', '{{recipient_address}}')}
@@ -201,14 +285,14 @@ function renderTemplate(shipment) {
                     </table>
                   </td>
                   <td valign="top" style="width:50%;padding-left:8px;">
-                    <div style="font-size:11px;color:${NAVY};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${NAVY};padding-bottom:5px;margin-bottom:9px;">Sender</div>
+                    <div style="font-size:11px;color:${WHITE};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${WHITE};padding-bottom:5px;margin-bottom:9px;">Sender</div>
                     <table role="presentation">
                       ${detailRow('Name', escapeHtml(COMPANY.legal_name))}
                       ${detailRow('Address', escapeHtml(COMPANY.address))}
                       ${detailRow('Phone', escapeHtml(COMPANY.phone))}
                       ${detailRow('Email', escapeHtml(COMPANY.email))}
                     </table>
-                    <div style="font-size:11px;color:${BRAND_RED};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${BRAND_RED};padding-bottom:5px;margin:16px 0 9px;">Consignment</div>
+                    <div style="font-size:11px;color:${CORAL};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${CORAL};padding-bottom:5px;margin:16px 0 9px;">Consignment</div>
                     <table role="presentation">
                       ${detailRow('Cargo', '{{cargo_type}} freight')}
                       ${detailRow('Weight', '{{package_weight}} kg')}
@@ -224,52 +308,38 @@ function renderTemplate(shipment) {
           <!-- ═══ Cost breakdown ═══ -->
           <tr>
             <td style="padding:24px 34px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${LINE};border-radius:10px;border-collapse:separate;overflow:hidden;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${DARK_LINE};border-radius:10px;border-collapse:separate;overflow:hidden;">
                 <tr>
-                  <td colspan="2" style="background:${NAVY};color:#FFFFFF;font-size:11px;letter-spacing:1.6px;padding:11px 16px;font-weight:bold;text-transform:uppercase;">Cost Breakdown (${cur})</td>
+                  <td colspan="2" style="background:${NAVY};color:${WHITE};font-size:11px;letter-spacing:1.6px;padding:11px 16px;font-weight:bold;text-transform:uppercase;">Cost Breakdown (${cur})</td>
                 </tr>
                 ${rowHtml}
                 <tr>
-                  <td style="padding:13px 16px;background:#EDEFF3;color:${NAVY};font-weight:bold;font-size:15px;">TOTAL</td>
-                  <td style="padding:13px 16px;background:#EDEFF3;color:${NAVY};font-weight:bold;font-size:15px;text-align:right;">{{total_cost}}</td>
+                  <td style="padding:13px 16px;background:#202430;color:${WHITE};font-weight:bold;font-size:15px;">TOTAL</td>
+                  <td style="padding:13px 16px;background:#202430;color:${WHITE};font-weight:bold;font-size:15px;text-align:right;">{{total_cost}}</td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="padding:10px 16px;background:#FFFFFF;">
-                    <span style="display:inline-block;font-size:11px;font-weight:bold;letter-spacing:1px;color:#FFFFFF;background:${payColor};padding:4px 12px;border-radius:999px;">${payLabel}</span>
+                  <td colspan="2" style="padding:10px 16px;background:${DARK_CARD};">
+                    <span style="display:inline-block;font-size:11px;font-weight:bold;letter-spacing:1px;color:${WHITE};background:${payColor};padding:4px 12px;border-radius:999px;">${payLabel}</span>
                   </td>
                 </tr>
               </table>
-              <p style="margin:8px 2px 0;color:#9CA3AF;font-size:11.5px;">The official commercial invoice for this consignment is attached to this email as a PDF.</p>
+              <p style="margin:8px 2px 0;color:${DIM};font-size:11.5px;">The official commercial invoice for this consignment is attached to this email as a PDF.</p>
             </td>
           </tr>
 
           <!-- ═══ CTA ═══ -->
           <tr>
-            <td align="center" style="padding:28px 34px 6px;">
-              <a href="{{tracking_url}}" style="display:inline-block;background:${BRAND_RED};color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:15px;padding:14px 40px;border-radius:8px;letter-spacing:0.4px;">Track Your Package</a>
-              <p style="margin:12px 0 0;color:#9CA3AF;font-size:12px;">Or paste this link into your browser:<br />
+            <td align="center" style="padding:26px 34px 4px;">
+              <a href="{{tracking_url}}" style="display:inline-block;background:${CORAL};color:${WHITE};text-decoration:none;font-weight:bold;font-size:15px;padding:14px 40px;border-radius:8px;letter-spacing:0.4px;">Track Your Package</a>
+              <p style="margin:12px 0 0;color:${DIM};font-size:12px;">Or paste this link into your browser:<br />
                 <span style="color:${MUTED};">{{tracking_url}}</span>
               </p>
             </td>
           </tr>
+${letterheadDetails()}
+${brandFooter('This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.')}`
 
-          <!-- ═══ Footer ═══ -->
-          <tr><td style="padding:10px 34px 0;"><div style="height:1px;background:${LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>
-          <tr>
-            <td style="padding:16px 34px 28px;text-align:center;">
-              <div style="color:#9CA3AF;font-size:11.5px;line-height:1.8;">
-                <strong style="color:${NAVY};">${COMPANY.legal_name}</strong> — leading logistics and distribution services<br />
-                ${COMPANY.address} &bull; ${COMPANY.email}<br />
-                Fax: ${COMPANY.fax} &bull; Reg. No. ${COMPANY.reg_no} &bull; ${COMPANY.website}<br />
-                <span style="font-size:10.5px;">This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.</span>
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
-    </table>
-  </body>
-</html>`
+  return darkShell(inner)
 }
 
 export function fillTemplate(shipment) {
@@ -290,10 +360,6 @@ export function fillTemplate(shipment) {
     .replaceAll('{{progress_percentage}}', String(shipment.progress_percentage ?? 0))
     .replaceAll('{{total_cost}}', fmt(shipment.total_cost, shipment.currency || 'NGN'))
     .replaceAll('{{tracking_url}}', TRACKING_URL(shipment.tracking_number))
-}
-
-function escapeHtml(s = '') {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
 // SMTP transport (Brevo SMTP, Gmail, Mailgun, Mailtrap… any provider).
@@ -487,9 +553,10 @@ export async function sendShipmentEmail(shipment, admin) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// CONFIRMATION LETTER — exact formal letter format.
-// The letterhead (company name, address, fax, reg. no, email, website),
-// the body wording and the signature block are HARDCODED. Only the date
+// CONFIRMATION LETTER — exact formal letter format on the unified
+// dark theme. The letterhead banner, the navy highlight bar, the
+// company details (address, fax, reg. no, email, website), the body
+// wording and the signature block are HARDCODED. Only the date
 // (always current), the reference/tracking number and the recipient
 // details vary per shipment.
 // ─────────────────────────────────────────────────────────────────
@@ -500,69 +567,58 @@ export function renderConfirmationLetter(shipment) {
     day: 'numeric',
     year: 'numeric',
   })
-  const name = escapeHtml(shipment.recipient_name || '—')
-  const address = escapeHtml(shipment.recipient_address || '—')
-  const emailAddr = escapeHtml(shipment.recipient_email || '—')
-  const phone = escapeHtml(shipment.recipient_phone || '—')
+  const rawName = String(shipment.recipient_name || '—')
+  const rawAddress = String(shipment.recipient_address || '—')
+  const rawEmail = String(shipment.recipient_email || '—')
+  const rawPhone = String(shipment.recipient_phone || '—')
+  const name = escapeHtml(rawName)
+  const address = escapeHtml(rawAddress)
+  const emailAddr = escapeHtml(rawEmail)
+  const phone = escapeHtml(rawPhone)
   const reference = escapeHtml(shipment.tracking_number)
   const origin = escapeHtml(shipment.origin_city || '—')
   const destination = escapeHtml(shipment.destination_city || '—')
 
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#EEF1F6;font-family:Georgia,'Times New Roman',Times,serif;-webkit-font-smoothing:antialiased;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF1F6;padding:28px 12px;">
-      <tr><td align="center">
-        <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(3,20,53,0.12);">
+  // Clickable recipient values: maps link, mailto: and tel:
+  const mapsHref = `https://maps.google.com/?q=${encodeURIComponent(rawAddress)}`
+  const mailHref = `mailto:${rawEmail}`
+  const telHref = `tel:${rawPhone.replace(/[^\d+]/g, '')}`
 
-          <!-- ═══ Letterhead (HARDCODED — not editable) ═══ -->
-          <tr>
-            <td style="padding:36px 42px 0;text-align:center;">
-              <div style="font-size:23px;font-weight:bold;color:${NAVY};letter-spacing:1.4px;">${COMPANY.legal_name}</div>
-              <div style="width:130px;height:3px;background:${BRAND_RED};margin:12px auto 16px;"></div>
-              <div style="font-size:12.5px;color:#374151;line-height:1.75;font-family:Arial,Helvetica,sans-serif;">
-                ${COMPANY.address}<br />
-                Fax: ${COMPANY.fax}<br />
-                Reg. No. ${COMPANY.reg_no}<br />
-                Email: ${COMPANY.email}<br />
-                Website: ${COMPANY.website}
-              </div>
-            </td>
-          </tr>
-          <tr><td style="padding:0 42px;"><div style="border-bottom:1px solid #D7DBE3;font-size:0;line-height:0;">&nbsp;</div></td></tr>
+  const inner = `
+          ${letterheadDetails().trimStart()}
 
           <!-- ═══ Date — always current ═══ -->
           <tr>
-            <td style="padding:16px 42px 0;font-size:13.5px;color:#374151;font-family:Arial,Helvetica,sans-serif;">
-              Date: <strong style="color:${NAVY};">${date}</strong>
+            <td style="padding:14px 34px 0;text-align:right;font-size:13px;font-family:Arial,Helvetica,sans-serif;">
+              <span style="color:${CORAL};font-style:italic;">Date: ${date}</span>
             </td>
           </tr>
 
-          <!-- ═══ Letter body — exact wording ═══ -->
+          <!-- ═══ Letter body — exact wording (HARDCODED) ═══ -->
           <tr>
-            <td style="padding:20px 42px 36px;font-size:14.5px;color:#1F2937;line-height:1.85;">
+            <td style="padding:18px 34px 34px;font-size:14.5px;color:${OFF_WHITE};line-height:1.85;">
               <p style="margin:0 0 20px;">Dear ${name}</p>
 
-              <p style="margin:0 0 20px;font-size:16.5px;font-weight:bold;color:${NAVY};text-align:center;letter-spacing:0.3px;">Official Notification of Incoming Shipment</p>
+              <h1 style="margin:0 0 22px;font-size:17px;font-weight:bold;color:${WHITE};text-decoration:underline;text-align:center;letter-spacing:0.3px;">Official Notification of Incoming Shipment</h1>
 
-              <p style="margin:0 0 4px;">Reference Number: <strong style="color:${NAVY};">${reference}</strong></p>
-              <p style="margin:0 0 18px;">Shipment Origin and Destination: ${origin} to ${destination}.</p>
+              <p style="margin:0 0 4px;"><em style="color:${MUTED};">Reference Number:</em> <strong style="color:${WHITE};">${reference}</strong></p>
+              <p style="margin:0 0 18px;"><em style="color:${MUTED};">Shipment Origin and Destination:</em> <strong style="color:${WHITE};">${origin} to ${destination}.</strong></p>
 
               <p style="margin:0 0 14px;">Cross Borders Deliveries is pleased to inform you that a consignment has been received and is scheduled for delivery to your registered residential address.</p>
 
               <p style="margin:0 0 10px;">To proceed with the dispatch, we kindly request your confirmation that the following details are accurate:</p>
 
-              <ul style="margin:0 0 16px;padding-left:24px;">
-                <li style="margin:0 0 7px;"><strong>Full Name:</strong> ${name}</li>
-                <li style="margin:0 0 7px;"><strong>Delivery Address:</strong> ${address}</li>
-                <li style="margin:0 0 7px;"><strong>Email Address:</strong> ${emailAddr}</li>
-                <li style="margin:0 0 7px;"><strong>Telephone Number:</strong> ${phone}</li>
-              </ul>
+              <p style="margin:0 0 18px;">
+                <em style="color:${MUTED};">Full Name:</em> <strong style="color:${WHITE};">${name}</strong><br />
+                <em style="color:${MUTED};">Delivery Address:</em> <a href="${escapeHtml(mapsHref)}" style="color:${BLUE};text-decoration:underline;">${address}</a><br />
+                <em style="color:${MUTED};">Email Address:</em> <a href="${escapeHtml(mailHref)}" style="color:${BLUE};text-decoration:underline;">${emailAddr}</a><br />
+                <em style="color:${MUTED};">Telephone Number:</em> <a href="${escapeHtml(telHref)}" style="color:${BLUE};text-decoration:underline;font-weight:bold;">${phone}</a>
+              </p>
 
               <p style="margin:0 0 16px;">Upon verification of the above information, we will promptly arrange for the shipment to your address.</p>
 
-              <p style="margin:0 0 16px;"><strong>Important Requirement:</strong><br />
-                Due to security protocols and the high-value nature of this consignment, the recipient must present a form of government-issued identification at the time of delivery for verification purposes. Failure to provide such identification may result in the package being withheld or returned.</p>
+              <p style="margin:0 0 16px;"><strong style="color:${WHITE};">Important Requirement:</strong><br />
+                <em style="color:${OFF_WHITE};">Due to security protocols and the high-value nature of this consignment, the recipient must present a form of government-issued identification at the time of delivery for verification purposes. Failure to provide such identification may result in the package being withheld or returned.</em></p>
 
               <p style="margin:0 0 16px;">We kindly request that you contact us at your earliest convenience to confirm the dispatch and release of the shipment. Your prompt response will help us avoid any delays and ensure a high standard of service.</p>
 
@@ -571,15 +627,14 @@ export function renderConfirmationLetter(shipment) {
               <p style="margin:0 0 26px;">Thank you for choosing Cross Borders Deliveries.</p>
 
               <p style="margin:0;">Yours sincerely,<br /><br />
-                <strong>${COMPANY.signatory}</strong><br />
-                ${COMPANY.signatory_title}</p>
+                <strong style="color:${WHITE};">${escapeHtml(COMPANY.signatory)}</strong><br />
+                ${escapeHtml(COMPANY.signatory_title)}<br />
+                <strong style="color:${WHITE};">${escapeHtml(COMPANY.legal_name)}</strong></p>
             </td>
           </tr>
-        </table>
-      </td></tr>
-    </table>
-  </body>
-</html>`
+${brandFooter('This is an automated letter from Cross Borders Deliveries. If you were not expecting this consignment, please contact us immediately.')}`
+
+  return darkShell(inner)
 }
 
 // Confirmation letter — sent from the admin's "Send Confirmation" button.
