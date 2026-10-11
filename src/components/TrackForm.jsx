@@ -46,9 +46,9 @@ export default function TrackForm() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl rounded-md bg-white p-5 shadow-[0_18px_45px_rgba(0,0,0,0.14)] sm:p-6 md:p-8">
+    <div className="mx-auto w-full max-w-3xl rounded-md border border-[#E5E7EB] bg-[#F3F4F6] p-5 shadow-[0_16px_40px_rgba(3,20,53,0.16)] sm:p-6 md:p-8">
       <form onSubmit={handleSubmit} className="track-form">
-        <h4 className="text-center font-body text-h4 font-normal">
+        <h4 className="text-center font-heading text-h4 font-bold text-navy">
           Enter the Consignment No. <span className="font-bold text-primary">*</span>
         </h4>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -56,10 +56,10 @@ export default function TrackForm() {
             type="text"
             value={number}
             onChange={(e) => setNumber(e.target.value)}
-            placeholder="Enter Tracking Number..."
+            placeholder="Enter Tracking Number"
             autoComplete="off"
             required
-            className="min-w-0 flex-1 rounded-sm border border-neutral-300 bg-white px-5 py-3.5 text-base shadow-inner placeholder:text-neutral-400 focus:outline focus:outline-2 focus:outline-primary max-sm:border-r"
+            className="min-w-0 flex-1 rounded-sm border border-[#E5E7EB] bg-white px-5 py-3.5 text-base text-black shadow-sm placeholder:text-neutral-400 focus:outline focus:outline-2 focus:outline-primary max-sm:border-r"
           />
           <button
             type="submit"

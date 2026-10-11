@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import HeroSlider from '../components/HeroSlider.jsx'
+import Hero from '../components/Hero.jsx'
 import TrackForm from '../components/TrackForm.jsx'
 // Shipping quote calculator — disabled for now (also commented out on the API side)
 // import QuoteCalculator from '../components/QuoteCalculator.jsx'
@@ -8,18 +8,11 @@ import { services, partnerLogos } from '../data/site.js'
 export default function Home() {
   return (
     <>
-      <HeroSlider />
+      <Hero />
 
-      {/* Track shipment band */}
-      <section
-        className="relative bg-cover bg-center py-12 sm:py-16 lg:py-24"
-        style={{
-          backgroundImage:
-            'image-set(url(/images/track-300x149.webp) 300w, url(/images/track-768x381.webp) 768w, url(/images/track.webp) 1200w)',
-        }}
-      >
-        <div className="absolute inset-0 bg-navy/45" />
-        <div className="container-x relative z-[2]">
+      {/* Track shipment — floating card overlapping the bottom of the hero banner */}
+      <section className="relative z-[2] -mt-12 sm:-mt-14 lg:-mt-20">
+        <div className="container-x">
           <TrackForm />
           {/* Shipping quote calculator — disabled for now
           <div className="mt-6 lg:mt-0">
