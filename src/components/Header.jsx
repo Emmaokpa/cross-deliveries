@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { navMenu, siteInfo } from '../data/site.js'
 
@@ -6,8 +6,10 @@ import { navMenu, siteInfo } from '../data/site.js'
 // Site header — mirrors the original WordPress layout: pure white
 // background with the logo centered at the top and a minimalist
 // hamburger icon in a light border-rounded box directly below it.
-// The hamburger opens the full menu (with expandable submenus) on
-// every viewport, exactly like the original UI.
+// The hamburger glides open an off-canvas drawer from the right with
+// a dark translucent (blurred) backdrop behind it, exactly like the
+// original UI. Closes via the X button, clicking outside, Escape or
+// navigating to any link.
 // ─────────────────────────────────────────────────────────────────
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -17,6 +19,21 @@ export default function Header() {
     setMenuOpen(false)
     setOpenSub(null)
   }
+
+  // Escape closes the drawer; body scroll is locked while it's open
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') closeMenu()
+    }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [menuOpen])
 
   return (
     <header className="w-full bg-white">
@@ -36,26 +53,48 @@ export default function Header() {
         <button
           type="button"
           className="flex size-11 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-xl leading-none text-black transition-colors duration-200 hover:border-primary hover:text-primary"
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-label="Open menu"
           aria-expanded={menuOpen}
           aria-controls="site-menu"
-          onClick={() => setMenuOpen((o) => !o)}
+          onClick={() => setMenuOpen(true)}
         >
-          {menuOpen ? '✕' : '☰'}
+          ☰
         </button>
       </div>
 
-      {/* Menu panel — always mounted so it animates open/closed on every viewport */}
+      {/* Backdrop — dark translucent + blur; click anywhere to close */}
+      <div
+        aria-hidden="true"
+        onClick={closeMenu}
+        className={`fixed inset-0 z-40 bg-black/55 backdrop-blur-[3px] transition-opacity duration-300 ${
+          menuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
+
+      {/* Off-canvas drawer — glides smoothly in from the right */}
       <nav
         id="site-menu"
-        className={`overflow-hidden border-t border-[#E5E7EB] bg-white transition-[max-height] duration-300 ease-in-out ${
-          menuOpen ? 'max-h-[calc(100vh-180px)] overflow-y-auto' : 'max-h-0 border-t-0'
-        }`}
         aria-label="Main"
         aria-hidden={!menuOpen}
         inert={menuOpen ? undefined : true}
+        className={`fixed right-0 top-0 z-50 flex h-full w-80 max-w-[86vw] flex-col bg-white shadow-[-12px_0_40px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-in-out ${
+          menuOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
       >
-        <ul className="mx-auto max-w-2xl px-5 pb-6 pt-1">
+        {/* Drawer head — logo + clear close (X) button */}
+        <div className="flex shrink-0 items-center justify-between border-b border-[#E5E7EB] px-5 py-4">
+          <img src="/images/Logo-edited.png" alt="" width="150" height="84" className="h-9 w-auto" />
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={closeMenu}
+            className="flex size-10 items-center justify-center rounded-md border border-[#E5E7EB] text-lg leading-none text-black transition-colors hover:border-primary hover:text-primary"
+          >
+            ✕
+          </button>
+        </div>
+
+        <ul className="min-h-0 flex-1 overflow-y-auto px-5 pb-8">
           {navMenu.map((item) => (
             <li key={item.label} className="border-b border-neutral-100 last:border-b-0">
               {item.children ? (
@@ -71,7 +110,7 @@ export default function Header() {
                   </button>
                   {/* Submenu — accordion, same routes as before */}
                   <ul
-                    className={`overflow-hidden transition-[max-height] duration-250 ease-in-out ${
+                    className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${
                       openSub === item.label ? 'max-h-64' : 'max-h-0'
                     }`}
                   >
