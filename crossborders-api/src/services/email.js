@@ -66,14 +66,14 @@ function brandBanner() {
   return `
           <!-- ═══ Brand banner (HARDCODED letterhead) ═══ -->
           <tr>
-            <td style="background:linear-gradient(135deg,#FFFFFF 0%,#EEF1F5 55%,#E2E8F2 100%);background-color:#F2F5FA;padding:13px 28px;">
+            <td class="cbd-pad" style="background:linear-gradient(135deg,#FFFFFF 0%,#EEF1F5 55%,#E2E8F2 100%);background-color:#F2F5FA;padding:13px 28px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-                <td valign="middle" style="width:70px;">
-                  <img src="${logoSrc()}" alt="Cross Borders Deliveries" width="60" style="display:block;width:60px;height:auto;border:0;" />
+                <td class="cbd-logo-cell" valign="middle" style="width:70px;">
+                  <img src="${logoSrc()}" alt="Cross Borders Deliveries" width="60" style="display:block;width:60px;height:auto;border:0;" class="cbd-logo" />
                 </td>
                 <td valign="middle" style="padding-left:14px;">
-                  <div style="color:${NAVY};font-size:21px;font-weight:bold;letter-spacing:0.2px;">Cross Borders <span style="color:${CORAL};">Deliveries</span></div>
-                  <div style="color:#5B6478;font-size:9.5px;letter-spacing:2.2px;text-transform:uppercase;margin-top:3px;">Global Logistics &amp; Courier Services</div>
+                  <div class="cbd-brand" style="color:${NAVY};font-size:21px;font-weight:bold;letter-spacing:0.2px;">Cross Borders <span style="color:${CORAL};">Deliveries</span></div>
+                  <div class="cbd-brand-sub" style="color:#5B6478;font-size:9.5px;letter-spacing:2.2px;text-transform:uppercase;margin-top:3px;">Global Logistics &amp; Courier Services</div>
                 </td>
               </tr></table>
             </td>
@@ -82,13 +82,46 @@ function brandBanner() {
 
 // Dark shell: dark outer wrapper + clean dark container. Every system
 // template renders its content inside this block.
+//
+// RESPONSIVE: the container is already fluid (width:100% / max-width), but a
+// browser preview also needs a viewport meta tag — without it a phone renders
+// a ~980px desktop viewport and shrinks the whole letter to ~40% scale (the
+// "shrunken UI" look). With the meta + the mobile rules below, the letter
+// fills the phone screen edge-to-edge at full text size, the same way the
+// invoice PDF does in a PDF viewer. The <style> block degrades gracefully in
+// email clients that ignore it — every layout-critical rule stays inline.
 function darkShell(inner, { width = 620 } = {}) {
   return `<!doctype html>
-<html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(COMPANY.brand_name)}</title>
+    <style>
+      /* Mobile: drop the desktop gutters so the card fills the screen like a page. */
+      @media only screen and (max-width:620px){
+        .cbd-shell{padding:0 !important;}
+        .cbd-card{border-radius:0 !important;box-shadow:none !important;}
+        .cbd-pad{padding-left:18px !important;padding-right:18px !important;}
+        .cbd-logo-cell{width:46px !important;}
+        .cbd-logo{width:42px !important;}
+        .cbd-brand{font-size:16.5px !important;letter-spacing:0 !important;}
+        .cbd-brand-sub{font-size:8.5px !important;letter-spacing:1.5px !important;}
+        .cbd-legal{font-size:13px !important;letter-spacing:1.2px !important;}
+        .cbd-body{font-size:15px !important;line-height:1.75 !important;}
+        .cbd-title{font-size:16px !important;}
+        .cbd-foot{font-size:12px !important;}
+        .cbd-track{font-size:19px !important;letter-spacing:1px !important;}
+        /* Stack the two detail columns (Recipient / Sender) vertically. */
+        .cbd-cols,.cbd-cols tr,.cbd-cols td{display:block !important;width:auto !important;}
+        .cbd-cols td{padding:0 0 20px !important;}
+      }
+    </style>
+  </head>
   <body style="margin:0;padding:0;background:${DARK_BG};font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_BG};padding:28px 12px;">
+    <table role="presentation" class="cbd-shell" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_BG};padding:28px 12px;">
       <tr><td align="center">
-        <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" style="max-width:${width}px;width:100%;background:${DARK_CARD};border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.55);">
+        <table role="presentation" class="cbd-card" width="${width}" cellpadding="0" cellspacing="0" style="max-width:${width}px;width:100%;background:${DARK_CARD};border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.55);">
 ${brandBanner()}
 ${inner}
         </table>
@@ -108,9 +141,9 @@ function letterheadDetails() {
   return `
           <!-- ═══ Letterhead details (HARDCODED — not editable) ═══ -->
           <tr>
-            <td style="padding:0 28px;">
+            <td class="cbd-pad" style="padding:0 28px;">
               <div style="background:${NAVY};border-radius:8px;padding:9px 14px;margin-top:18px;text-align:center;">
-                <span style="color:${WHITE};font-size:15.5px;font-weight:bold;letter-spacing:1.8px;">${COMPANY.legal_name}</span>
+                <span class="cbd-legal" style="color:${WHITE};font-size:15.5px;font-weight:bold;letter-spacing:1.8px;">${COMPANY.legal_name}</span>
               </div>
               <div style="text-align:center;font-size:12px;line-height:1.95;color:${CORAL};padding:13px 8px 0;">
                 ${escapeHtml(COMPANY.address)},<br />
@@ -121,17 +154,17 @@ function letterheadDetails() {
               </div>
             </td>
           </tr>
-          <tr><td style="padding:16px 28px 0;"><div style="height:1px;background:${DARK_LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>`
+          <tr><td class="cbd-pad" style="padding:16px 28px 0;"><div style="height:1px;background:${DARK_LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>`
 }
 
 // Hardcoded footer strip — identical on every system email.
 function brandFooter(note) {
   return `
           <!-- ═══ Footer (HARDCODED) ═══ -->
-          <tr><td style="padding:22px 28px 0;"><div style="height:1px;background:${DARK_LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>
+          <tr><td class="cbd-pad" style="padding:22px 28px 0;"><div style="height:1px;background:${DARK_LINE};font-size:0;line-height:0;">&nbsp;</div></td></tr>
           <tr>
-            <td style="padding:14px 28px 26px;text-align:center;">
-              <div style="color:${DIM};font-size:11.5px;line-height:1.9;font-family:Arial,Helvetica,sans-serif;">
+            <td class="cbd-pad" style="padding:14px 28px 26px;text-align:center;">
+              <div class="cbd-foot" style="color:${DIM};font-size:11.5px;line-height:1.9;font-family:Arial,Helvetica,sans-serif;">
                 <strong style="color:${CORAL};">${COMPANY.legal_name}</strong> — leading logistics and distribution services<br />
                 ${escapeHtml(COMPANY.address)} &bull; Fax: ${escapeHtml(COMPANY.fax)}<br />
                 Reg. No. ${escapeHtml(COMPANY.reg_no)} &bull; ${escapeHtml(COMPANY.email)} &bull; ${escapeHtml(COMPANY.website)}<br />
@@ -161,7 +194,7 @@ function renderTemplate(shipment) {
     ? `
           <!-- ═══ Delivered banner ═══ -->
           <tr>
-            <td style="padding:14px 34px 0;">
+            <td class="cbd-pad" style="padding:14px 34px 0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0F2419;border:1px solid #1D6B41;border-radius:10px;">
                 <tr>
                   <td style="padding:16px 18px;text-align:center;">
@@ -203,7 +236,7 @@ function renderTemplate(shipment) {
   const inner = `
           <!-- ═══ Greeting ═══ -->
           <tr>
-            <td style="padding:26px 34px 4px;">
+            <td class="cbd-pad" style="padding:26px 34px 4px;">
               <h1 style="margin:0 0 8px;font-size:20px;color:${WHITE};">Shipment Update: {{current_status}}</h1>
               <p style="margin:0;color:${OFF_WHITE};font-size:14px;line-height:1.7;">
                 Dear {{recipient_name}},<br />
@@ -214,10 +247,10 @@ function renderTemplate(shipment) {
 
           <!-- ═══ Tracking number — copy box ═══ -->
           <tr>
-            <td style="padding:18px 34px 4px;">
+            <td class="cbd-pad" style="padding:18px 34px 4px;">
               <div style="border:2px dashed ${CORAL};background:${DARK_PANEL};border-radius:10px;padding:14px 18px;text-align:center;">
                 <div style="font-size:10px;color:${MUTED};letter-spacing:1.6px;text-transform:uppercase;margin-bottom:5px;">Your Tracking Number</div>
-                <div style="font-size:22px;font-weight:bold;color:${CORAL};letter-spacing:1.5px;font-family:'Courier New',monospace;">{{tracking_number}}</div>
+                <div class="cbd-track" style="font-size:22px;font-weight:bold;color:${CORAL};letter-spacing:1.5px;font-family:'Courier New',monospace;">{{tracking_number}}</div>
                 <div style="font-size:11px;color:${DIM};margin-top:6px;">Select &amp; copy this number to track your delivery</div>
               </div>
             </td>
@@ -225,7 +258,7 @@ function renderTemplate(shipment) {
 
           <!-- ═══ Status + progress card ═══ -->
           <tr>
-            <td style="padding:14px 34px 0;">
+            <td class="cbd-pad" style="padding:14px 34px 0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_PANEL};border-radius:10px;border:1px solid ${DARK_LINE};">
                 <tr>
                   <td style="padding:16px 18px;">
@@ -256,7 +289,7 @@ function renderTemplate(shipment) {
           ${!isDelivered && eta
             ? `<!-- ═══ ETA banner ═══ -->
           <tr>
-            <td style="padding:14px 34px 0;">
+            <td class="cbd-pad" style="padding:14px 34px 0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0F2419;border:1px solid #1D6B41;border-radius:10px;">
                 <tr>
                   <td style="padding:12px 18px;color:#8FBFA3;font-size:13.5px;">
@@ -270,8 +303,8 @@ function renderTemplate(shipment) {
 
           <!-- ═══ Shipment details ═══ -->
           <tr>
-            <td style="padding:22px 34px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <td class="cbd-pad" style="padding:22px 34px 0;">
+              <table class="cbd-cols" role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td valign="top" style="width:50%;padding-right:8px;">
                     <div style="font-size:11px;color:${CORAL};letter-spacing:1.4px;font-weight:bold;text-transform:uppercase;border-bottom:2px solid ${CORAL};padding-bottom:5px;margin-bottom:9px;">Recipient</div>
@@ -307,7 +340,7 @@ function renderTemplate(shipment) {
 
           <!-- ═══ Cost breakdown ═══ -->
           <tr>
-            <td style="padding:24px 34px 0;">
+            <td class="cbd-pad" style="padding:24px 34px 0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${DARK_LINE};border-radius:10px;border-collapse:separate;overflow:hidden;">
                 <tr>
                   <td colspan="2" style="background:${NAVY};color:${WHITE};font-size:11px;letter-spacing:1.6px;padding:11px 16px;font-weight:bold;text-transform:uppercase;">Cost Breakdown (${cur})</td>
@@ -329,7 +362,7 @@ function renderTemplate(shipment) {
 
           <!-- ═══ CTA ═══ -->
           <tr>
-            <td align="center" style="padding:26px 34px 4px;">
+            <td align="center" class="cbd-pad" style="padding:26px 34px 4px;">
               <a href="{{tracking_url}}" style="display:inline-block;background:${CORAL};color:${WHITE};text-decoration:none;font-weight:bold;font-size:15px;padding:14px 40px;border-radius:8px;letter-spacing:0.4px;">Track Your Package</a>
               <p style="margin:12px 0 0;color:${DIM};font-size:12px;">Or paste this link into your browser:<br />
                 <span style="color:${MUTED};">{{tracking_url}}</span>
@@ -589,17 +622,17 @@ export function renderConfirmationLetter(shipment) {
 
           <!-- ═══ Date — always current ═══ -->
           <tr>
-            <td style="padding:14px 34px 0;text-align:right;font-size:13px;font-family:Arial,Helvetica,sans-serif;">
+            <td class="cbd-pad" style="padding:14px 34px 0;text-align:right;font-size:13px;font-family:Arial,Helvetica,sans-serif;">
               <span style="color:${CORAL};font-style:italic;">Date: ${date}</span>
             </td>
           </tr>
 
           <!-- ═══ Letter body — exact wording (HARDCODED) ═══ -->
           <tr>
-            <td style="padding:18px 34px 34px;font-size:14.5px;color:${OFF_WHITE};line-height:1.85;">
+            <td class="cbd-pad cbd-body" style="padding:18px 34px 34px;font-size:14.5px;color:${OFF_WHITE};line-height:1.85;">
               <p style="margin:0 0 20px;">Dear ${name}</p>
 
-              <h1 style="margin:0 0 22px;font-size:17px;font-weight:bold;color:${WHITE};text-decoration:underline;text-align:center;letter-spacing:0.3px;">Official Notification of Incoming Shipment</h1>
+              <h1 class="cbd-title" style="margin:0 0 22px;font-size:17px;font-weight:bold;color:${WHITE};text-decoration:underline;text-align:center;letter-spacing:0.3px;">Official Notification of Incoming Shipment</h1>
 
               <p style="margin:0 0 4px;"><em style="color:${MUTED};">Reference Number:</em> <strong style="color:${WHITE};">${reference}</strong></p>
               <p style="margin:0 0 18px;"><em style="color:${MUTED};">Shipment Origin and Destination:</em> <strong style="color:${WHITE};">${origin} to ${destination}.</strong></p>
