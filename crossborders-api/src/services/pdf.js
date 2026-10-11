@@ -79,10 +79,11 @@ export async function buildInvoicePdf(shipment) {
 async function drawLetterhead(doc, shipment) {
   const W = doc.page.width
 
-  // ── Brand banner (HARDCODED) — light/gradient strip with the red-and-dark
-  //    "X" logo mark on the left and the bold brand name to its right ──
+  // ── Brand banner (HARDCODED) — soft pink-tinted gradient strip with the
+  //    red-and-dark "X" logo mark on the left and the bold brand name to its
+  //    right. Same gentle white → coral-wash tint as the email letterhead.
   const banner = doc.linearGradient(0, 0, W, 84)
-  banner.stop(0, '#FFFFFF').stop(1, '#E2E8F2')
+  banner.stop(0, '#FFFFFF').stop(0.55, '#FDEEE9').stop(1, '#F8D7CD')
   doc.rect(0, 0, W, 84).fill(banner)
 
   if (fs.existsSync(LOGO_PATH)) {

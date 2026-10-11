@@ -60,13 +60,17 @@ function logoSrc() {
   return logoDataUriCache
 }
 
-// Brand banner: light/gradient strip with the logo mark on the left and
-// the bold "Cross Borders Deliveries" lockup on the right.
+// Brand banner: soft pink-tinted gradient strip with the logo mark on the
+// left and the bold "Cross Borders Deliveries" lockup on the right. The
+// pink is deliberately gentle — white easing into a barely-there coral
+// wash (#FDEEE9 → #F8D7CD, ~15-30% of the brand coral over white) so it
+// reads as a subtle tint, never a hard color block. Mirrored by the
+// invoice PDF banner.
 function brandBanner() {
   return `
           <!-- ═══ Brand banner (HARDCODED letterhead) ═══ -->
           <tr>
-            <td class="cbd-pad" style="background:linear-gradient(135deg,#FFFFFF 0%,#EEF1F5 55%,#E2E8F2 100%);background-color:#F2F5FA;padding:13px 28px;">
+            <td class="cbd-pad" style="background:linear-gradient(135deg,#FFFFFF 0%,#FDEEE9 55%,#F8D7CD 100%);background-color:#FCEFEB;padding:13px 28px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
                 <td class="cbd-logo-cell" valign="middle" style="width:70px;">
                   <img src="${logoSrc()}" alt="Cross Borders Deliveries" width="60" style="display:block;width:60px;height:auto;border:0;" class="cbd-logo" />
