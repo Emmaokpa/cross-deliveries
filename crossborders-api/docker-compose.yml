@@ -1,0 +1,69 @@
+# ---------------------------------------------------------------------------
+# CrossBordersDeliveries — PocketBase (database) + Express API
+#
+# Deploy this single compose file in Coolify ("New Resource" → "Compose").
+# Both services share an internal network, so the API reaches PocketBase at
+# http://pocketbase:8090 without exposing the database publicly.
+#
+# Set these as Environment Variables on the compose service in Coolify:
+#   JWT_SECRET                 long random string
+#   POCKETBASE_ADMIN_EMAIL      superuser email (created automatically below)
+#   POCKETBASE_ADMIN_PASSWORD   superuser password
+#   CORS_ORIGINS                your frontend origin(s), comma-separated
+#   APP_DOMAIN                  public URL of the frontend
+#   (optional email) BREVO_API_KEY / SMTP_* / MAIL_FROM  — add when mails go live
+# ---------------------------------------------------------------------------
+
+services:
+  pocketbase:
+    image: pocketbase/pocketbase:latest
+    restart: unless-stopped
+    # Auto-create the superuser the API logs in with (no manual docker exec).
+    command: >
+      ./pocketbase serve --http=0.0.0.0:8090
+      --superuser="${POCKETBASE_ADMIN_EMAIL}" "${POCKETBASE_ADMIN_PASSWORD}"
+    environment:
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL:?set in Coolify}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD:?set in Coolify}
+    volumes:
+      - pocketbase_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # No public ports — the API talks to it over the internal network.
+    # To reach the PocketBase admin UI, temporarily add:
+    #   ports: ["8090:8090"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      POCKETBASE_URL: http://pocketbase:8090
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL:?set in Coolify}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD:?set in Coolify}
+      JWT_SECRET: ${JWT_SECRET:?set in Coolify}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      APP_DOMAIN: ${APP_DOMAIN:-}
+      # Email (wire up later once the domain/mailbox are ready)
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    # Coolify routes traffic to the container on PORT (8787).
+    expose:
+      - "8787"
+
+volumes:
+  pocketbase_data:
