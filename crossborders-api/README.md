@@ -1,6 +1,8 @@
 # CrossBordersDeliveries — API
 
-Standalone Express + MongoDB backend. Serves JSON under `/api` — no frontend files. The website itself lives in the sibling repo/folder and is deployed on Vercel; it talks to this API over HTTP.
+Standalone Express + PocketBase backend. Serves JSON under `/api` — no frontend files. The website itself lives in the sibling repo/folder and is deployed on Vercel; it talks to this API over HTTP.
+
+PocketBase is the database (self-hosted, SQLite). It stores its data in a single file inside its container, so **back up `pb_data/`** and you back up everything.
 
 ## Layout
 
@@ -8,9 +10,12 @@ Standalone Express + MongoDB backend. Serves JSON under `/api` — no frontend f
 crossborders-api/
 ├── src/
 │   ├── index.js            # Express app + CORS + routes
-│   ├── db.js               # Mongoose models + connection + super-admin seed
+│   ├── db.js               # PocketBase client + collections + super-admin seed
 │   ├── routes/             # auth, shipments, public tracking, audit
 │   └── services/           # email (Brevo), PDF invoices, shipment utils
+├── scripts/
+│   └── migrate-from-mongodb.mjs   # one-time MongoDB → PocketBase import
+├── Dockerfile              # container image for Coolify / Docker
 ├── package.json
 ├── .env.example            # copy to .env and fill in
 └── README.md
@@ -19,43 +24,76 @@ crossborders-api/
 ## Run locally
 
 ```bash
-cp .env.example .env        # then fill in MONGODB_URI + JWT_SECRET
+cp .env.example .env        # then fill in POCKETBASE_URL + superuser creds + JWT_SECRET
 npm install
 npm run dev                 # or: npm start
 # API on http://localhost:8787  (health: /api/health)
 ```
 
-## Deploy to a VPS (first time)
+### PocketBase (local dev)
 
 ```bash
-# 1. Copy the folder to your VPS
-scp -r crossborders-api/ root@YOUR_VPS_IP:/opt/crossborders-api
+mkdir -p pb_data
+docker run -d --name pocketbase -p 8090:8090 \
+  -v "$PWD/pb_data:/pb/pb_data" \
+  pocketbase/pocketbase:latest
 
-# 2. On the VPS: install Node 20+ and PM2, then run it
-ssh root@YOUR_VPS_IP
-cd /opt/crossborders-api
-npm ci --omit=dev           # or npm install
-cp .env.example .env && nano .env   # set MONGODB_URI, JWT_SECRET, CORS_ORIGINS, APP_DOMAIN
-npm i -g pm2
-pm2 start src/index.js --name crossborders-api
-pm2 save && pm2 startup     # auto-restart on reboot
+# create the superuser the API will use
+docker exec -it pocketbase ./pocketbase superuser upsert admin@example.com YOUR_PASSWORD
 ```
 
-Then put Nginx or Caddy in front for HTTPS and reverse-proxy to port 8787 (a minimal Nginx location block: `proxy_pass http://127.0.0.1:8787;`). Point your `CORS_ORIGINS` at your Vercel domain, e.g. `https://your-site.vercel.app,https://your-custom-domain.com`.
+On first boot the API creates its three collections automatically
+(`admins`, `shipments`, `audit_logs`) — no manual schema setup needed.
+All collection API rules are `null` (superuser only), so nothing outside this
+API can read or write raw records.
+
+## Migrating from MongoDB Atlas (one time)
+
+```bash
+# .env must have MONGODB_URI (Atlas) + POCKETBASE_URL + superuser creds
+npm run migrate:mongodb
+```
+
+The script copies `admins`, `shipments` (with checkpoints + POD) and
+`audit_logs` into PocketBase. It is idempotent (records are matched by their
+original Mongo `_id`), can be safely re-run, and prints instructions if
+PocketBase refuses to preserve the original `created`/`updated` timestamps.
+Once you are happy with the result, delete `scripts/`, the `migrate:mongodb`
+script entry and the `mongodb` devDependency — the app itself has no
+MongoDB dependency.
+
+## Deploy to a VPS with Docker + Coolify
+
+```bash
+docker build -t crossborders-api .
+```
+
+In Coolify: add the **PocketBase** service (image `pocketbase/pocketbase:latest`,
+volume `pb_data:/pb/pb_data`, port `8090`) and the **API** service built from
+this Dockerfile. Set the environment variables below on the API service,
+point `POCKETBASE_URL` at PocketBase's internal Docker URL
+(e.g. `http://pocketbase:8090`) and create the superuser once with:
+
+```bash
+docker exec -it <pocketbase-container> ./pocketbase superuser upsert admin@example.com YOUR_PASSWORD
+```
 
 ## Environment variables
 
 | Variable | Purpose |
 |---|---|
-| `MONGODB_URI` | Atlas/VPS MongoDB connection string (**required**) |
+| `POCKETBASE_URL` | URL of your self-hosted PocketBase instance (**required**) |
+| `POCKETBASE_ADMIN_EMAIL` | PocketBase superuser email used by the API (**required**) |
+| `POCKETBASE_ADMIN_PASSWORD` | PocketBase superuser password (**required**) |
 | `JWT_SECRET` | Long random string for signing admin tokens (**required**) |
 | `PORT` | Port to listen on (default `8787`) |
 | `APP_DOMAIN` | Public frontend URL — used in tracking links inside emails/PDFs |
 | `CORS_ORIGINS` | Comma-separated frontend origins allowed by CORS |
 | `BREVO_API_KEY` | Brevo key for shipment emails (emails are simulated in logs when empty) |
 | `MAIL_FROM` | Sender address for shipment emails |
+| `MONGODB_URI` | Only for `npm run migrate:mongodb` — safe to remove afterwards |
 
 ## Notes
 
-- On first boot with an empty database it seeds a super admin: `admin@gmail.com` / `password123` (forced password reset on first login). Change it immediately.
+- On first boot it seeds a super admin: `admin@gmail.com` / `password123`. Change it immediately.
 - The API never serves the frontend build; point the frontend's `VITE_API_URL` at this server instead.

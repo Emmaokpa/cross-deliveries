@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer'
 import fs from 'node:fs'
-import { Shipment } from '../db.js'
+import { COLLECTIONS, updateRecord } from '../db.js'
 import { audit } from '../routes/auth.js'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 import { COMPANY } from './company.js'
@@ -522,7 +522,7 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
         )
       }
       await sendViaBrevoApi({ to, subject, html: htmlApi, attachments })
-      await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
+      await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
       await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via Brevo API`)
       return { sent: true, to, subject, message: 'Email sent via Brevo API (HTTPS).' }
     } catch (err) {
@@ -548,7 +548,7 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
       html,
       attachments,
     })
-    await Shipment.updateOne({ _id: shipment._id }, { email_sent_at: new Date() })
+    await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
     await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via SMTP port ${port}`)
     return { sent: true, to, subject, message: `Email sent via SMTP (port ${port}).` }
   } catch (err) {

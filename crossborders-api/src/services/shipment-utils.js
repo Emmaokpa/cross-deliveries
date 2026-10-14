@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Shipment } from '../db.js'
+import { COLLECTIONS, escapeFilter, findOne } from '../db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Self-contained brand logo, shipped with the API (assets/logo.png) — used inline in emails and on PDF invoices
@@ -24,7 +24,7 @@ export async function generateTrackingNumber() {
   for (let attempt = 0; attempt < 25; attempt++) {
     const num = Math.floor(10000 + Math.random() * 90000)
     const candidate = `CBD-${year}-${num}`
-    const exists = await Shipment.exists({ tracking_number: candidate })
+    const exists = await findOne(COLLECTIONS.shipments, `tracking_number = '${escapeFilter(candidate)}'`)
     if (!exists) return candidate
   }
   throw new Error('Could not generate a unique tracking number')

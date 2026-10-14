@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { Shipment, Types } from '../db.js'
+import { COLLECTIONS, createRecord, deleteRecord, escapeFilter, findRecord, findOne, isRecordId, listAll, updateRecord } from '../db.js'
 import { audit, authRequired } from './auth.js'
 import { STATUS_PROGRESS, TRACKING_URL, generateTrackingNumber, computeFinancials } from '../services/shipment-utils.js'
 import { buildInvoicePdf } from '../services/pdf.js'
@@ -51,37 +51,58 @@ function parseShipment(body) {
   return data
 }
 
+// Accepts either a PocketBase record id or a tracking number.
 async function getShipment(id) {
-  return Shipment.findOne(Types.ObjectId.isValid(id) ? { _id: id } : { tracking_number: id.toUpperCase() })
+  const raw = String(id || '').trim()
+  if (isRecordId(raw)) {
+    const byId = await findRecord(COLLECTIONS.shipments, raw)
+    if (byId) return byId
+  }
+  if (!raw) return null
+  return findOne(COLLECTIONS.shipments, `tracking_number = '${escapeFilter(raw.toUpperCase())}'`)
+}
+
+// Checkpoints/pod are JSON fields and may come back as null on old records.
+function ensureShape(shipment) {
+  if (!Array.isArray(shipment.checkpoints)) shipment.checkpoints = []
+  if (!shipment.pod || typeof shipment.pod !== 'object') {
+    shipment.pod = { receiver_name: '', signature: '', signed_at: null, recorded_by: '' }
+  }
+  return shipment
 }
 
 function withTimeline(shipment) {
-  const doc = shipment.toObject ? shipment.toObject() : shipment
   return {
-    ...doc,
-    id: String(doc._id),
-    checkpoints: [...(doc.checkpoints || [])].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
-    tracking_url: TRACKING_URL(doc.tracking_number),
+    ...shipment,
+    id: String(shipment._id),
+    checkpoints: [...(shipment.checkpoints || [])].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
+    tracking_url: TRACKING_URL(shipment.tracking_number),
   }
+}
+
+// Persist a mutated shipment (the whole mapped record is sent; unknown or
+// derived fields are filtered out by the data layer).
+async function saveShipment(shipment) {
+  return updateRecord(COLLECTIONS.shipments, shipment.id, shipment)
 }
 
 // GET /api/v1/shipments?status=&q=
 router.get('/shipments', async (req, res) => {
   try {
     const { status, q } = req.query
-    const filter = {}
-    if (status) filter.current_status = status
+    const clauses = []
+    if (status) clauses.push(`current_status = '${escapeFilter(status)}'`)
     if (q) {
-      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
-      filter.$or = [
-        { tracking_number: rx },
-        { recipient_name: rx },
-        { sender_name: rx },
-        { recipient_email: rx },
-      ]
+      const needle = escapeFilter(q)
+      clauses.push(
+        `(tracking_number~'${needle}' || recipient_name~'${needle}' || sender_name~'${needle}' || recipient_email~'${needle}')`,
+      )
     }
-    const shipments = await Shipment.find(filter).sort({ created_at: -1 }).lean()
-    res.json({ shipments: shipments.map((s) => ({ ...s, id: String(s._id) })) })
+    const shipments = await listAll(COLLECTIONS.shipments, {
+      filter: clauses.join(' && '),
+      sort: '-created',
+    })
+    res.json({ shipments })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -93,7 +114,7 @@ router.post('/shipments', async (req, res) => {
     const data = parseShipment(req.body || {})
     const fin = computeFinancials(req.body || {})
     const tracking = await generateTrackingNumber()
-    const shipment = await Shipment.create({
+    const shipment = await createRecord(COLLECTIONS.shipments, {
       ...data,
       tracking_number: tracking,
       cargo_type: data.cargo_type || 'Air',
@@ -129,11 +150,11 @@ router.post('/shipments', async (req, res) => {
   }
 })
 
-// GET /api/v1/shipsments/:id — accepts Mongo id or tracking number
+// GET /api/v1/shipments/:id — accepts record id or tracking number
 router.get('/shipments/:id', async (req, res) => {
   const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  res.json({ shipment: withTimeline(shipment) })
+  res.json({ shipment: withTimeline(ensureShape(shipment)) })
 })
 
 // PATCH /api/v1/shipments/:id — edit consignment details
@@ -143,6 +164,7 @@ router.patch('/shipments/:id', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    ensureShape(shipment)
 
     // Direct progress/status edits (independent of the consignment fields)
     const body = req.body || {}
@@ -163,8 +185,8 @@ router.patch('/shipments/:id', async (req, res) => {
 
     const hasConsign = Object.keys(body).some((k) => SHIPMENT_FIELDS.includes(k))
     if (hasConsign) {
-      const data = parseShipment({ ...shipment.toObject(), ...body })
-      const fin = computeFinancials({ ...shipment.toObject(), ...body })
+      const data = parseShipment({ ...shipment, ...body })
+      const fin = computeFinancials({ ...shipment, ...body })
       Object.assign(shipment, data, {
         base_freight: fin.base,
         surcharge_fuel: fin.fuel,
@@ -187,14 +209,14 @@ router.patch('/shipments/:id', async (req, res) => {
     const nothingToDo = !hasConsign && !touch.status && touch.progress === undefined
     if (nothingToDo) return res.status(400).json({ error: 'No editable fields provided' })
 
-    await shipment.save()
+    const updated = await saveShipment(shipment)
     const bits = [
       touch.status ? `status → ${touch.status}` : null,
       touch.progress !== undefined ? `progress → ${touch.progress}%` : null,
       hasConsign ? 'consignment details' : null,
     ].filter(Boolean).join(', ')
-    await audit(req.admin, 'shipment.updated', 'shipment', String(shipment._id), `${shipment.tracking_number}: ${bits}`)
-    res.json({ shipment: withTimeline(shipment) })
+    await audit(req.admin, 'shipment.updated', 'shipment', String(updated._id), `${updated.tracking_number}: ${bits}`)
+    res.json({ shipment: withTimeline(updated) })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
@@ -205,6 +227,7 @@ router.patch('/shipments/:id/status', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    ensureShape(shipment)
     const { status, location, notes, backdated_timestamp, trigger_email, progress_percentage } = req.body || {}
     if (!status) return res.status(400).json({ error: 'status is required' })
     if (!(status in STATUS_PROGRESS)) return res.status(400).json({ error: `Invalid status: ${status}` })
@@ -240,15 +263,15 @@ router.patch('/shipments/:id/status', async (req, res) => {
       status_tag: status,
       admin_notes: notes || '',
     })
-    await shipment.save()
-    await audit(req.admin, 'shipment.status_changed', 'shipment', String(shipment._id), `${shipment.tracking_number}: → ${status}`)
+    const updated = await saveShipment(shipment)
+    await audit(req.admin, 'shipment.status_changed', 'shipment', String(updated._id), `${updated.tracking_number}: → ${status}`)
 
     let emailResult = null
     const emailTriggered = trigger_email === true || (trigger_email === undefined && ['Shipped', 'Out for Delivery', 'Delivered'].includes(status))
     if (emailTriggered) {
-      emailResult = sendShipmentEmail(shipment, req.admin)
+      emailResult = sendShipmentEmail(updated, req.admin)
     }
-    res.json({ shipment: withTimeline(shipment), email: emailResult })
+    res.json({ shipment: withTimeline(updated), email: emailResult })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -258,7 +281,7 @@ router.patch('/shipments/:id/status', async (req, res) => {
 router.delete('/shipments/:id', async (req, res) => {
   const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  await shipment.deleteOne()
+  await deleteRecord(COLLECTIONS.shipments, shipment.id)
   await audit(req.admin, 'shipment.deleted', 'shipment', String(shipment._id), `Deleted ${shipment.tracking_number}`)
   res.json({ ok: true })
 })
@@ -273,6 +296,7 @@ router.post('/shipments/:id/checkpoints', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    ensureShape(shipment)
     const { timestamp, location, status_tag, admin_notes, set_status, progress_percentage } = req.body || {}
     if (!location || !status_tag) return res.status(400).json({ error: 'location and status_tag are required' })
     if (set_status !== undefined && set_status !== '' && !(set_status in STATUS_PROGRESS)) {
@@ -296,13 +320,13 @@ router.post('/shipments/:id/checkpoints', async (req, res) => {
     if (progress === null && set_status !== undefined && set_status !== '') progress = STATUS_PROGRESS[set_status]
     if (progress !== null) shipment.progress_percentage = progress
 
-    await shipment.save()
+    const updated = await saveShipment(shipment)
     const extras = [
       statusChanged ? `status → ${set_status}` : null,
       progress !== null ? `progress → ${progress}%` : null,
     ].filter(Boolean).join(', ')
-    await audit(req.admin, 'checkpoint.created', 'shipment', String(shipment._id), `${shipment.tracking_number}: checkpoint at ${location}${extras ? ` (${extras})` : ''}`)
-    res.status(201).json({ shipment: withTimeline(shipment) })
+    await audit(req.admin, 'checkpoint.created', 'shipment', String(updated._id), `${updated.tracking_number}: checkpoint at ${location}${extras ? ` (${extras})` : ''}`)
+    res.status(201).json({ shipment: withTimeline(updated) })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
@@ -313,8 +337,8 @@ router.patch('/shipments/:id/checkpoints/:cpId', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    // checkpoints use a custom UUID `id` field (schema has _id:false), so the
-    // Mongoose DocumentArray#id() helper can't find them — match manually.
+    ensureShape(shipment)
+    // checkpoints live in a JSON field with a custom UUID `id`, so match manually.
     const cp = shipment.checkpoints.find((c) => c.id === req.params.cpId)
     if (!cp) return res.status(404).json({ error: 'Checkpoint not found' })
     const { timestamp, location, status_tag, admin_notes } = req.body || {}
@@ -326,9 +350,9 @@ router.patch('/shipments/:id/checkpoints/:cpId', async (req, res) => {
     if (location !== undefined) cp.location = location
     if (status_tag !== undefined) cp.status_tag = status_tag
     if (admin_notes !== undefined) cp.admin_notes = admin_notes
-    await shipment.save()
-    await audit(req.admin, 'checkpoint.updated', 'shipment', String(shipment._id), `Edited checkpoint ${cp.id}`)
-    res.json({ shipment: withTimeline(shipment) })
+    const updated = await saveShipment(shipment)
+    await audit(req.admin, 'checkpoint.updated', 'shipment', String(updated._id), `Edited checkpoint ${cp.id}`)
+    res.json({ shipment: withTimeline(updated) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -339,13 +363,14 @@ router.delete('/shipments/:id/checkpoints/:cpId', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    ensureShape(shipment)
     const idx = shipment.checkpoints.findIndex((c) => c.id === req.params.cpId)
     if (idx === -1) return res.status(404).json({ error: 'Checkpoint not found' })
     const cp = shipment.checkpoints[idx]
     shipment.checkpoints.splice(idx, 1)
-    await shipment.save()
-    await audit(req.admin, 'checkpoint.deleted', 'shipment', String(shipment._id), `Deleted checkpoint at ${cp.location}`)
-    res.json({ shipment: withTimeline(shipment) })
+    const updated = await saveShipment(shipment)
+    await audit(req.admin, 'checkpoint.deleted', 'shipment', String(updated._id), `Deleted checkpoint at ${cp.location}`)
+    res.json({ shipment: withTimeline(updated) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -357,7 +382,7 @@ router.delete('/shipments/:id/checkpoints/:cpId', async (req, res) => {
 router.get('/shipments/:id/pod', async (req, res) => {
   const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  res.json({ pod: shipment.pod || {}, delivered_at: shipment.delivered_at, current_status: shipment.current_status })
+  res.json({ pod: shipment.pod || {}, delivered_at: shipment.delivered_at || null, current_status: shipment.current_status })
 })
 
 // POST /api/v1/shipments/:id/pod — record delivery proof (receiver name + signature)
@@ -367,6 +392,7 @@ router.post('/shipments/:id/pod', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    ensureShape(shipment)
     const { receiver_name, signature, delivered_at } = req.body || {}
     if (!receiver_name || !String(receiver_name).trim()) {
       return res.status(400).json({ error: 'receiver_name is required' })
@@ -398,11 +424,11 @@ router.post('/shipments/:id/pod', async (req, res) => {
       status_tag: 'Delivered',
       admin_notes: `Received by ${shipment.pod.receiver_name}`,
     })
-    await shipment.save()
-    await audit(req.admin, 'shipment.delivered', 'shipment', String(shipment._id), `${shipment.tracking_number}: POD recorded, received by ${shipment.pod.receiver_name}`)
+    const updated = await saveShipment(shipment)
+    await audit(req.admin, 'shipment.delivered', 'shipment', String(updated._id), `${updated.tracking_number}: POD recorded, received by ${updated.pod.receiver_name}`)
 
-    const emailResult = await sendShipmentEmail(shipment, req.admin)
-    res.json({ shipment: withTimeline(shipment), email: emailResult })
+    const emailResult = await sendShipmentEmail(updated, req.admin)
+    res.json({ shipment: withTimeline(updated), email: emailResult })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -413,15 +439,16 @@ router.delete('/shipments/:id/pod', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
+    ensureShape(shipment)
     shipment.pod = { receiver_name: '', signature: '', signed_at: null, recorded_by: '' }
     shipment.delivered_at = null
     if (shipment.current_status === 'Delivered') {
       shipment.current_status = 'Out for Delivery'
       shipment.progress_percentage = STATUS_PROGRESS['Out for Delivery']
     }
-    await shipment.save()
-    await audit(req.admin, 'shipment.pod_cleared', 'shipment', String(shipment._id), `${shipment.tracking_number}: POD cleared, shipment reopened`)
-    res.json({ shipment: withTimeline(shipment) })
+    const updated = await saveShipment(shipment)
+    await audit(req.admin, 'shipment.pod_cleared', 'shipment', String(updated._id), `${updated.tracking_number}: POD cleared, shipment reopened`)
+    res.json({ shipment: withTimeline(updated) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -433,7 +460,7 @@ router.delete('/shipments/:id/pod', async (req, res) => {
 router.get('/shipments/:id/invoice.pdf', async (req, res) => {
   const shipment = await getShipment(req.params.id)
   if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-  const doc = await buildInvoicePdf(shipment.toObject ? shipment.toObject() : shipment)
+  const doc = await buildInvoicePdf(shipment)
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `attachment; filename="${shipment.tracking_number}-invoice.pdf"`)
   doc.pipe(res)
@@ -455,7 +482,7 @@ router.get('/shipments/:id/email.html', async (req, res) => {
   try {
     const shipment = await getShipment(req.params.id)
     if (!shipment) return res.status(404).json({ error: 'Shipment not found' })
-    const doc = shipment.toObject ? shipment.toObject() : shipment
+    const doc = shipment
     const template = String(req.query.template || 'confirmation').toLowerCase()
     const isStatus = template === 'status'
     const html = isStatus ? fillTemplate(doc) : renderConfirmationLetter(doc)
@@ -502,11 +529,11 @@ router.post('/shipments/:id/send-confirmation', async (req, res) => {
     shipment.destination_city = pick('destination_city', shipment.destination_city)
     // Sender / company block is locked — always the hardcoded constants
     Object.assign(shipment, HARDCODED_SENDER)
-    await shipment.save()
-    await audit(req.admin, 'confirmation.sent', 'shipment', String(shipment._id), `Confirmation letter for ${shipment.tracking_number} → ${recipient_email}`)
+    const updated = await saveShipment(shipment)
+    await audit(req.admin, 'confirmation.sent', 'shipment', String(updated._id), `Confirmation letter for ${updated.tracking_number} → ${recipient_email}`)
 
-    const result = await sendConfirmationEmail(shipment, req.admin)
-    res.json({ ...result, shipment: withTimeline(shipment) })
+    const result = await sendConfirmationEmail(updated, req.admin)
+    res.json({ ...result, shipment: withTimeline(updated) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

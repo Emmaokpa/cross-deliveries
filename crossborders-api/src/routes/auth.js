@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { Admin, AuditLog, Types } from '../db.js'
+import { COLLECTIONS, createRecord, countRecords, escapeFilter, findRecord, findOne, isRecordId, listAll, updateRecord } from '../db.js'
 
 const router = Router()
 const adminUsersRouter = Router()
@@ -13,7 +13,7 @@ function signToken(admin) {
 
 export async function audit(admin, action, entityType, entityId, details = '') {
   try {
-    await AuditLog.create({
+    await createRecord(COLLECTIONS.auditLogs, {
       admin_id: admin?.id || admin?._id ? String(admin.id || admin._id) : null,
       admin_email: admin?.email || 'system',
       action,
@@ -32,8 +32,8 @@ export async function authRequired(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Authentication required' })
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    const admin = await Admin.findOne({ _id: payload.sub, active: true })
-    if (!admin) return res.status(401).json({ error: 'Account is deactivated' })
+    const admin = payload.sub ? await findRecord(COLLECTIONS.admins, payload.sub) : null
+    if (!admin || admin.active !== true) return res.status(401).json({ error: 'Account is deactivated' })
     req.admin = admin
     next()
   } catch {
@@ -66,11 +66,12 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body || {}
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
-    const admin = await Admin.findOne({ email: String(email).toLowerCase().trim() })
+    const normalized = String(email).toLowerCase().trim()
+    const admin = await findOne(COLLECTIONS.admins, `email = '${escapeFilter(normalized)}'`)
     if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
       return res.status(401).json({ error: 'Invalid email or password' })
     }
-    if (!admin.active) return res.status(403).json({ error: 'Account is deactivated' })
+    if (admin.active !== true) return res.status(403).json({ error: 'Account is deactivated' })
     await audit(admin, 'admin.login', 'admin', String(admin._id))
     res.json({ token: signToken(admin), admin: publicAdmin(admin) })
   } catch (e) {
@@ -96,9 +97,10 @@ router.post('/change-password', authRequired, async (req, res) => {
     if (!bcrypt.compareSync(current_password, req.admin.password_hash)) {
       return res.status(401).json({ error: 'Current password is incorrect' })
     }
-    req.admin.password_hash = bcrypt.hashSync(new_password, 10)
-    req.admin.must_reset_password = false
-    await req.admin.save()
+    await updateRecord(COLLECTIONS.admins, req.admin.id, {
+      password_hash: bcrypt.hashSync(new_password, 10),
+      must_reset_password: false,
+    })
     await audit(req.admin, 'admin.password_changed', 'admin', String(req.admin._id))
     res.json({ ok: true })
   } catch (e) {
@@ -108,7 +110,7 @@ router.post('/change-password', authRequired, async (req, res) => {
 
 // GET /api/admin/users (super admin)
 adminUsersRouter.get('/users', authRequired, superAdminOnly, async (req, res) => {
-  const users = await Admin.find().sort({ created_at: 1 }).lean()
+  const users = await listAll(COLLECTIONS.admins, { sort: 'created' })
   res.json({ users: users.map(publicAdmin) })
 })
 
@@ -123,13 +125,14 @@ adminUsersRouter.post('/users', authRequired, superAdminOnly, async (req, res) =
       return res.status(400).json({ error: 'Password must be at least 8 characters' })
     }
     const normalized = String(email).toLowerCase().trim()
-    const exists = await Admin.findOne({ email: normalized }).lean()
+    const exists = await findOne(COLLECTIONS.admins, `email = '${escapeFilter(normalized)}'`)
     if (exists) return res.status(409).json({ error: 'An admin with this email already exists' })
-    const created = await Admin.create({
+    const created = await createRecord(COLLECTIONS.admins, {
       email: normalized,
       name,
       password_hash: bcrypt.hashSync(password, 10),
       role: role === 'super_admin' ? 'super_admin' : 'admin',
+      active: true,
       must_reset_password: true,
     })
     await audit(req.admin, 'admin.created', 'admin', String(created._id), `Created admin ${normalized} (${created.role})`)
@@ -143,27 +146,29 @@ adminUsersRouter.post('/users', authRequired, superAdminOnly, async (req, res) =
 adminUsersRouter.patch('/users/:id', authRequired, superAdminOnly, async (req, res) => {
   try {
     const { id } = req.params
-    if (!Types.ObjectId.isValid(id)) return res.status(404).json({ error: 'Admin not found' })
-    const target = await Admin.findById(id)
+    if (!isRecordId(id)) return res.status(404).json({ error: 'Admin not found' })
+    const target = await findRecord(COLLECTIONS.admins, id)
     if (!target) return res.status(404).json({ error: 'Admin not found' })
     const { name, password, role, active } = req.body || {}
 
     if (target.role === 'super_admin' && (active === false || role === 'admin')) {
-      const supers = await Admin.countDocuments({ role: 'super_admin', active: true })
+      const supers = await countRecords(COLLECTIONS.admins, "role = 'super_admin' && active = true")
       if (supers <= 1) return res.status(400).json({ error: 'Cannot demote or deactivate the last active super admin' })
     }
 
-    if (name !== undefined) target.name = name
-    if (role !== undefined) target.role = role === 'super_admin' ? 'super_admin' : 'admin'
-    if (active !== undefined) target.active = !!active
+    const patch = {}
+    if (name !== undefined) patch.name = name
+    if (role !== undefined) patch.role = role === 'super_admin' ? 'super_admin' : 'admin'
+    if (active !== undefined) patch.active = !!active
     if (password !== undefined) {
       if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' })
-      target.password_hash = bcrypt.hashSync(password, 10)
-      target.must_reset_password = true
+      patch.password_hash = bcrypt.hashSync(password, 10)
+      patch.must_reset_password = true
     }
-    await target.save()
+
+    const updated = await updateRecord(COLLECTIONS.admins, target.id, patch)
     await audit(req.admin, 'admin.updated', 'admin', String(target._id), `Updated admin ${target.email}`)
-    res.json({ admin: publicAdmin(target) })
+    res.json({ admin: publicAdmin(updated) })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }

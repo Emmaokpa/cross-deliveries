@@ -87,6 +87,6 @@ connectDB()
     })
   })
   .catch((err) => {
-    console.error('[server] MongoDB connection failed:', err.message)
+    console.error('[server] PocketBase connection failed:', err.message)
     process.exit(1)
   })

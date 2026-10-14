@@ -1,137 +1,414 @@
-import mongoose from 'mongoose'
+// ---------------------------------------------------------------------------
+// PocketBase data layer
+//
+// Replaces the old MongoDB/Mongoose implementation. PocketBase is the
+// self-hosted database (SQLite file inside its own container) and this
+// Express server talks to it over HTTP using a PocketBase superuser account.
+//
+// Collections are created automatically on the first boot (ensureCollections),
+// so pointing POCKETBASE_URL at a brand new PocketBase instance is enough to
+// get started — no manual schema setup required.
+//
+// Every collection's API rules are null, which means "superuser only":
+// nobody can touch the raw records directly. All reads/writes go through
+// this API, which is where authentication and validation live.
+// ---------------------------------------------------------------------------
+
+import PocketBase from 'pocketbase'
 import bcrypt from 'bcryptjs'
 import { CURRENCIES } from './services/currency.js'
 
-const { Schema, model, Types } = mongoose
+/** Collection (table) names used across the API. */
+export const COLLECTIONS = {
+  admins: 'admins',
+  shipments: 'shipments',
+  auditLogs: 'audit_logs',
+}
 
-// ---------- Admin ----------
-const adminSchema = new Schema(
-  {
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    name: { type: String, required: true },
-    password_hash: { type: String, required: true },
-    role: { type: String, enum: ['super_admin', 'admin'], default: 'admin' },
-    active: { type: Boolean, default: true },
-    must_reset_password: { type: Boolean, default: false },
+const ADMIN_ROLES = ['super_admin', 'admin']
+const CARGO_TYPES = ['Air', 'Ocean', 'Road']
+const PAYMENT_STATUSES = ['Paid', 'Unpaid', 'Pending']
+const SHIPMENT_STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
+const CURRENCY_CODES = CURRENCIES.map((c) => c.code)
+
+// null rules = superuser-only access for that action
+const PRIVATE = { listRule: null, viewRule: null, createRule: null, updateRule: null, deleteRule: null }
+
+// NOTE: `legacy_id`, `legacy_created` and `legacy_updated` are only populated
+// by scripts/migrate-from-mongodb.mjs (original MongoDB _id / timestamps).
+// They keep the migration re-runnable and make sure migrated records keep
+// their original creation date — PocketBase's HTTP API otherwise refuses to
+// let us write `created`/`updated` directly.
+const SCHEMAS = {
+  [COLLECTIONS.admins]: {
+    name: COLLECTIONS.admins,
+    type: 'base',
+    ...PRIVATE,
+    fields: [
+      { name: 'email', type: 'text', required: true },
+      { name: 'name', type: 'text', required: true },
+      { name: 'password_hash', type: 'text', required: true },
+      { name: 'role', type: 'select', values: ADMIN_ROLES, maxSelect: 1 },
+      { name: 'active', type: 'bool' },
+      { name: 'must_reset_password', type: 'bool' },
+      { name: 'legacy_id', type: 'text' },
+      { name: 'legacy_created', type: 'date' },
+      { name: 'legacy_updated', type: 'date' },
+    ],
+    indexes: [`CREATE UNIQUE INDEX idx_admins_email ON ${COLLECTIONS.admins} (email) WHERE email != ''`],
   },
-  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
+  [COLLECTIONS.shipments]: {
+    name: COLLECTIONS.shipments,
+    type: 'base',
+    ...PRIVATE,
+    fields: [
+      { name: 'tracking_number', type: 'text', required: true },
+      { name: 'sender_name', type: 'text', required: true },
+      { name: 'sender_email', type: 'text', required: true },
+      { name: 'sender_phone', type: 'text' },
+      { name: 'sender_address', type: 'text' },
+      { name: 'recipient_name', type: 'text', required: true },
+      { name: 'recipient_email', type: 'text', required: true },
+      { name: 'recipient_phone', type: 'text' },
+      { name: 'recipient_address', type: 'text' },
+      { name: 'recipient_city', type: 'text' },
+      { name: 'recipient_country', type: 'text' },
+      { name: 'origin_city', type: 'text' },
+      { name: 'destination_city', type: 'text' },
+      { name: 'cargo_type', type: 'select', values: CARGO_TYPES, maxSelect: 1 },
+      { name: 'package_weight', type: 'number' },
+      { name: 'package_dimensions', type: 'text' },
+      { name: 'package_quantity', type: 'number' },
+      { name: 'package_description', type: 'text' },
+      { name: 'base_freight', type: 'number' },
+      { name: 'surcharge_fuel', type: 'number' },
+      { name: 'surcharge_customs', type: 'number' },
+      { name: 'total_cost', type: 'number' },
+      { name: 'currency', type: 'select', values: CURRENCY_CODES, maxSelect: 1 },
+      { name: 'payment_status', type: 'select', values: PAYMENT_STATUSES, maxSelect: 1 },
+      { name: 'current_status', type: 'select', values: SHIPMENT_STATUSES, maxSelect: 1 },
+      { name: 'progress_percentage', type: 'number', min: 0, max: 100 },
+      { name: 'estimated_delivery', type: 'date' },
+      { name: 'email_sent_at', type: 'date' },
+      { name: 'delivered_at', type: 'date' },
+      { name: 'pod', type: 'json' },
+      { name: 'checkpoints', type: 'json' },
+      { name: 'legacy_id', type: 'text' },
+      { name: 'legacy_created', type: 'date' },
+      { name: 'legacy_updated', type: 'date' },
+    ],
+    indexes: [
+      `CREATE UNIQUE INDEX idx_shipments_tracking ON ${COLLECTIONS.shipments} (tracking_number) WHERE tracking_number != ''`,
+    ],
+  },
+  [COLLECTIONS.auditLogs]: {
+    name: COLLECTIONS.auditLogs,
+    type: 'base',
+    ...PRIVATE,
+    fields: [
+      { name: 'admin_id', type: 'text' },
+      { name: 'admin_email', type: 'text' },
+      { name: 'action', type: 'text', required: true },
+      { name: 'entity_type', type: 'text' },
+      { name: 'entity_id', type: 'text' },
+      { name: 'details', type: 'text' },
+      { name: 'legacy_id', type: 'text' },
+      { name: 'legacy_created', type: 'date' },
+      { name: 'legacy_updated', type: 'date' },
+    ],
+  },
+}
+
+// collection name -> { fieldName: field type } — drives request serialisation
+const FIELD_TYPES = Object.fromEntries(
+  Object.entries(SCHEMAS).map(([collection, schema]) => [
+    collection,
+    Object.fromEntries(schema.fields.map((field) => [field.name, field.type])),
+  ]),
 )
 
-// ---------- Checkpoint (embedded) ----------
-const checkpointSchema = new Schema(
-  {
-    id: { type: String, required: true },
-    timestamp: { type: Date, required: true },
-    location: { type: String, required: true },
-    status_tag: { type: String, required: true },
-    admin_notes: { type: String, default: '' },
-    created_at: { type: Date, default: Date.now },
-  },
-  { _id: false },
-)
+// ---------------------------------------------------------------------------
+// Client
+// ---------------------------------------------------------------------------
 
-// ---------- Shipment ----------
-const shipmentSchema = new Schema(
-  {
-    tracking_number: { type: String, required: true, unique: true },
-    sender_name: { type: String, required: true },
-    sender_email: { type: String, required: true },
-    sender_phone: { type: String, default: '' },
-    sender_address: { type: String, default: '' },
-    recipient_name: { type: String, required: true },
-    recipient_email: { type: String, required: true },
-    recipient_phone: { type: String, default: '' },
-    recipient_address: { type: String, default: '' },
-    recipient_city: { type: String, default: '' },
-    recipient_country: { type: String, default: '' },
-    origin_city: { type: String, default: '' },
-    destination_city: { type: String, default: '' },
-    cargo_type: { type: String, enum: ['Air', 'Ocean', 'Road'], default: 'Air' },
-    package_weight: { type: Number, default: 0 },
-    package_dimensions: { type: String, default: '' },
-    package_quantity: { type: Number, default: 1 },
-    package_description: { type: String, default: '' },
-    base_freight: { type: Number, default: 0 },
-    surcharge_fuel: { type: Number, default: 0 },
-    surcharge_customs: { type: Number, default: 0 },
-    total_cost: { type: Number, default: 0 },
-    currency: { type: String, enum: CURRENCIES.map((c) => c.code), default: 'NGN' },
-    payment_status: { type: String, enum: ['Paid', 'Unpaid', 'Pending'], default: 'Unpaid' },
-    current_status: {
-      type: String,
-      enum: ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold'],
-      default: 'Created',
-    },
-    progress_percentage: { type: Number, min: 0, max: 100, default: 0 },
-    estimated_delivery: { type: Date, default: null },
-    email_sent_at: { type: Date, default: null },
-    delivered_at: { type: Date, default: null },
-    pod: {
-      receiver_name: { type: String, default: '' },
-      signature: { type: String, default: '' }, // data URL PNG from the signature pad
-      signed_at: { type: Date, default: null },
-      recorded_by: { type: String, default: '' }, // admin email
-    },
-    checkpoints: { type: [checkpointSchema], default: [] },
-  },
-  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
-)
+const POCKETBASE_URL = (process.env.POCKETBASE_URL || '').trim().replace(/\/+$/, '')
+const SUPERUSER_EMAIL = (process.env.POCKETBASE_ADMIN_EMAIL || '').trim()
+const SUPERUSER_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD || ''
 
-// ---------- Audit log ----------
-const auditLogSchema = new Schema(
-  {
-    admin_id: { type: String, default: null },
-    admin_email: { type: String, default: 'system' },
-    action: { type: String, required: true },
-    entity_type: { type: String, default: null },
-    entity_id: { type: String, default: null },
-    details: { type: String, default: '' },
-  },
-  { timestamps: { createdAt: 'created_at', updatedAt: false } },
-)
+export const pb = new PocketBase(POCKETBASE_URL || 'http://pocketbase-not-configured.invalid')
 
-export const Admin = model('Admin', adminSchema)
-export const Shipment = model('Shipment', shipmentSchema)
-export const AuditLog = model('AuditLog', auditLogSchema)
+const AUTH_REFRESH_MS = 30 * 60 * 1000 // refresh the superuser token every 30 min
+let lastAuthAt = 0
+let pendingAuth = null
+let refreshTimer = null
 
-// ---------- Connection ----------
-const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL
-
-export async function connectDB() {
-  if (!MONGODB_URI) {
-    throw new Error('MONGODB_URI is not set. Copy .env.example to .env and add your Atlas connection string.')
+function validateEnv() {
+  if (!POCKETBASE_URL) {
+    throw new Error(
+      'POCKETBASE_URL is not set. Copy .env.example to .env and add your self-hosted PocketBase URL.',
+    )
   }
-  await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
-  console.log('[db] MongoDB connected:', mongoose.connection.name)
-  await seedSuperAdmin()
+  if (!SUPERUSER_EMAIL || !SUPERUSER_PASSWORD) {
+    throw new Error(
+      'POCKETBASE_ADMIN_EMAIL and POCKETBASE_ADMIN_PASSWORD are not set. They are the superuser credentials the API uses to talk to PocketBase.',
+    )
+  }
+}
+
+/** Authenticate as the PocketBase superuser (throttled to once per 30 min). */
+export async function ensureAuth({ force = false } = {}) {
+  if (!force && Date.now() - lastAuthAt < AUTH_REFRESH_MS) return
+  if (pendingAuth) return pendingAuth
+  pendingAuth = (async () => {
+    await pb.collection('_superusers').authWithPassword(SUPERUSER_EMAIL, SUPERUSER_PASSWORD)
+    lastAuthAt = Date.now()
+  })().finally(() => {
+    pendingAuth = null
+  })
+  return pendingAuth
+}
+
+/**
+ * Boot the database layer: validate env, authenticate against PocketBase and
+ * create any missing collections. Pass `seed: true` to also ensure the
+ * bootstrap super admin account exists.
+ */
+export async function initPocketBase({ seed = false } = {}) {
+  validateEnv()
+  await ensureAuth({ force: true })
+  await ensureCollections()
+  if (seed) await seedSuperAdmin()
+  if (!refreshTimer) {
+    refreshTimer = setInterval(() => {
+      ensureAuth({ force: true }).catch((err) => console.error('[db] PocketBase token refresh failed:', err.message))
+    }, AUTH_REFRESH_MS)
+    refreshTimer.unref?.()
+  }
+  return pb
+}
+
+/** Used by src/index.js on boot. */
+export async function connectDB() {
+  await initPocketBase({ seed: true })
+  console.log('[db] PocketBase connected:', pb.baseUrl)
+}
+
+// ---------------------------------------------------------------------------
+// Collections
+// ---------------------------------------------------------------------------
+
+/** Create any of the application collections that are missing on the server. */
+export async function ensureCollections() {
+  const existing = await pb.collections.getFullList({ sort: 'name' })
+  const existingNames = new Set(existing.map((collection) => collection.name))
+
+  for (const schema of Object.values(SCHEMAS)) {
+    if (existingNames.has(schema.name)) continue
+    try {
+      await pb.collections.create(schema)
+      console.log(`[db] Created PocketBase collection "${schema.name}"`)
+    } catch (err) {
+      if (!schema.indexes?.length) throw err
+      // Custom indexes are a nice-to-have (uniqueness is also enforced in the
+      // routes) — never let them block a boot on an SQLite syntax surprise.
+      console.warn(`[db] Could not create indexes for "${schema.name}" (${err.message}) — retrying without them`)
+      const { indexes, ...withoutIndexes } = schema
+      await pb.collections.create(withoutIndexes)
+      console.log(`[db] Created PocketBase collection "${schema.name}"`)
+    }
+  }
 }
 
 // TEMP MOCK BOOTSTRAP — remove when testing is done.
 // Every real admin logs in once with these mock creds, creates their own
 // super_admin account from Admin → Staff Accounts, and uses that from then
 // on. The mock account is re-ensured on every boot so it always works.
-// Cleanup when done: delete this function + its call in connectDB(), then
-// remove the admin@gmail.com document from the admins collection.
+// Cleanup when done: delete this function + its `seed: true` call, then
+// delete the admin@gmail.com record in the admins collection.
 async function seedSuperAdmin() {
   const email = 'admin@gmail.com'
-  const existing = await Admin.findOne({ email })
+  const password_hash = bcrypt.hashSync('password123', 10)
+  const existing = await findOne(COLLECTIONS.admins, `email = '${escapeFilter(email)}'`)
+
   if (!existing) {
-    await Admin.create({
+    await createRecord(COLLECTIONS.admins, {
       email,
       name: 'Super Admin',
-      password_hash: bcrypt.hashSync('password123', 10),
+      password_hash,
       role: 'super_admin',
+      active: true,
       must_reset_password: false,
     })
     console.log('[db] Seeded MOCK super admin: admin@gmail.com / password123')
     return
   }
-  existing.password_hash = bcrypt.hashSync('password123', 10)
-  existing.role = 'super_admin'
-  existing.active = true
-  existing.must_reset_password = false
-  await existing.save()
+
+  await updateRecord(COLLECTIONS.admins, existing.id, {
+    password_hash,
+    role: 'super_admin',
+    active: true,
+    must_reset_password: false,
+  })
   console.log('[db] Mock super admin ensured: admin@gmail.com / password123')
 }
 
-export { Types }
+// ---------------------------------------------------------------------------
+// Query helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * PocketBase filters are SQL-ish expressions; quote literals are taken
+ * verbatim, so strip the characters that could break out of a literal.
+ * (Values are only ever compared for equality/containment, so removing a
+ * stray quote or backslash just means "no match" instead of a 400.)
+ */
+export function escapeFilter(value) {
+  return String(value ?? '').replace(/['\\\u0000-\u001f]/g, '')
+}
+
+/** PocketBase record ids are 15 chars of [a-z0-9]. */
+export function isRecordId(value) {
+  return /^[a-z0-9]{15}$/.test(String(value || ''))
+}
+
+/**
+ * PocketBase dates are non-nullable and use the zero value "" when unset.
+ * `undefined` means "leave this field alone".
+ */
+function toPocketBaseDate(value) {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return ''
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().replace('T', ' ') // 2026-10-14 09:30:00.000Z
+}
+
+/** Keep only known collection fields and coerce them to PocketBase's types. */
+function toRecordPayload(collection, data) {
+  const types = FIELD_TYPES[collection]
+  if (!types) throw new Error(`Unknown PocketBase collection: ${collection}`)
+
+  const payload = {}
+  for (const [key, value] of Object.entries(data || {})) {
+    const type = types[key]
+    if (!type || key === 'id' || value === undefined) continue
+
+    if (type === 'date') {
+      const date = toPocketBaseDate(value)
+      if (date !== undefined) payload[key] = date
+    } else if (type === 'number') {
+      if (value === null || value === '') continue
+      const num = Number(value)
+      if (Number.isFinite(num)) payload[key] = num
+    } else if (type === 'bool') {
+      payload[key] = value === true || value === 'true' || value === 1
+    } else {
+      payload[key] = value
+    }
+  }
+  return payload
+}
+
+// PocketBase's own system fields are exposed under the legacy Mongo names so
+// the rest of the app (and the React admin) keeps seeing the same shape.
+const INTERNAL_FIELDS = new Set([
+  'collectionId',
+  'collectionName',
+  'created',
+  'updated',
+  'legacy_id',
+  'legacy_created',
+  'legacy_updated',
+])
+
+function mapRecord(record) {
+  if (!record) return record
+  const mapped = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (!INTERNAL_FIELDS.has(key)) mapped[key] = value
+  }
+  mapped.id = record.id
+  mapped._id = record.id
+  // Migrated records keep their original MongoDB creation date.
+  mapped.created_at = record.legacy_created || record.created || null
+  mapped.updated_at = record.updated || null
+  return mapped
+}
+
+function buildOptions({ filter, sort } = {}) {
+  const options = {}
+  if (filter) options.filter = filter
+  if (sort) options.sort = sort
+  return options
+}
+
+/** Fetch a record by its PocketBase id. Returns null when it doesn't exist. */
+export async function findRecord(collection, id) {
+  if (!id) return null
+  await ensureAuth()
+  try {
+    return mapRecord(await pb.collection(collection).getOne(id))
+  } catch (err) {
+    if (err?.status === 404) return null
+    throw err
+  }
+}
+
+/** Fetch the first record matching a PocketBase filter (null when none). */
+export async function findOne(collection, filter) {
+  await ensureAuth()
+  try {
+    return mapRecord(await pb.collection(collection).getFirstListItem(filter))
+  } catch (err) {
+    if (err?.status === 404) return null
+    throw err
+  }
+}
+
+/** One page of records, already mapped. */
+export async function listPage(collection, { filter, sort, page = 1, perPage = 100 } = {}) {
+  await ensureAuth()
+  const result = await pb.collection(collection).getList(page, perPage, buildOptions({ filter, sort }))
+  return {
+    items: result.items.map(mapRecord),
+    totalItems: result.totalItems,
+    totalPages: result.totalPages,
+  }
+}
+
+/** Every matching record (PocketBase paginates at 200 per request). */
+export async function listAll(collection, { filter, sort } = {}) {
+  const items = []
+  let page = 1
+  for (;;) {
+    const { items: batch, totalPages } = await listPage(collection, { filter, sort, page, perPage: 200 })
+    items.push(...batch)
+    if (batch.length === 0 || page >= totalPages) return items
+    page += 1
+  }
+}
+
+/** Number of records matching the filter. */
+export async function countRecords(collection, filter) {
+  await ensureAuth()
+  const result = await pb.collection(collection).getList(1, 1, filter ? { filter } : {})
+  return result.totalItems
+}
+
+export async function createRecord(collection, data) {
+  await ensureAuth()
+  const record = await pb.collection(collection).create(toRecordPayload(collection, data))
+  return mapRecord(record)
+}
+
+export async function updateRecord(collection, id, data) {
+  await ensureAuth()
+  const payload = toRecordPayload(collection, data)
+  const record = await pb.collection(collection).update(id, payload)
+  return mapRecord(record)
+}
+
+export async function deleteRecord(collection, id) {
+  await ensureAuth()
+  await pb.collection(collection).delete(id)
+}

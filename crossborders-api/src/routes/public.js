@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { Shipment } from '../db.js'
+import { COLLECTIONS, escapeFilter, findOne } from '../db.js'
 // Shipping quote engine — kept for later, endpoint disabled for now
 // import { computeQuote } from '../services/shipment-utils.js'
 
@@ -18,7 +18,7 @@ router.get('/track/:tracking_id', async (req, res) => {
   try {
     const id = String(req.params.tracking_id || '').trim().toUpperCase()
     if (!id) return res.status(400).json({ error: 'Tracking number is required' })
-    const shipment = await Shipment.findOne({ tracking_number: id }).lean()
+    const shipment = await findOne(COLLECTIONS.shipments, `tracking_number = '${escapeFilter(id)}'`)
     if (!shipment) return res.status(404).json({ error: 'Tracking number not found. Please check and try again.' })
 
     const checkpoints = (shipment.checkpoints || [])
@@ -28,7 +28,7 @@ router.get('/track/:tracking_id', async (req, res) => {
 
     const isDelivered = shipment.current_status === 'Delivered'
     const pod = isDelivered && shipment.pod?.receiver_name
-      ? { receiver_name: shipment.pod.receiver_name, signed_at: shipment.pod.signed_at }
+      ? { receiver_name: shipment.pod.receiver_name, signed_at: shipment.pod.signed_at || null }
       : null // signature image stays private; name + time are public proof
 
     // Privacy guard: never expose full recipient address publicly
@@ -44,7 +44,7 @@ router.get('/track/:tracking_id', async (req, res) => {
       package_description: shipment.package_description,
       checkpoints,
       estimated_delivery: shipment.estimated_delivery || null,
-      delivered_at: isDelivered ? shipment.delivered_at : null,
+      delivered_at: isDelivered ? shipment.delivered_at || null : null,
       pod,
     })
   } catch (e) {
