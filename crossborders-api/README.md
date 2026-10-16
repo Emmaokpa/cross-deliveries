@@ -14,7 +14,10 @@ crossborders-api/
 │   ├── routes/             # auth, shipments, public tracking, audit
 │   └── services/           # email (Brevo), PDF invoices, shipment utils
 ├── scripts/
-│   └── migrate-from-mongodb.mjs   # one-time MongoDB → PocketBase import
+│   ├── migrate-from-mongodb.mjs   # one-time MongoDB → PocketBase import
+│   └── schema.mjs                 # schema blueprint export / push / verify
+├── schema/
+│   └── collections.blueprint.json # versioned blueprint of the collections
 ├── Dockerfile              # container image for Coolify / Docker
 ├── package.json
 ├── .env.example            # copy to .env and fill in
@@ -46,6 +49,35 @@ On first boot the API creates its three collections automatically
 (`admins`, `shipments`, `audit_logs`) — no manual schema setup needed.
 All collection API rules are `null` (superuser only), so nothing outside this
 API can read or write raw records.
+
+## Database schema (blueprint / push / verify)
+
+The source of truth for the collections is `SCHEMAS` in `src/db.js`.
+`schema/collections.blueprint.json` is the generated, version-controlled
+blueprint of that schema in PocketBase's native import format:
+
+```bash
+npm run schema:export    # regenerate the blueprint from src/db.js
+npm run schema:push      # create/update the collections on PocketBase (idempotent)
+npm run schema:verify    # read-only drift report — exits 1 if the server differs
+```
+
+`schema:push` and `schema:verify` use the same env vars as the API
+(`POCKETBASE_URL`, `POCKETBASE_ADMIN_EMAIL`, `POCKETBASE_ADMIN_PASSWORD`).
+`schema:push` never deletes collections, fields or records — with
+`deleteMissing=false` it only creates what's missing and syncs fields, so it
+is always safe to re-run (e.g. after adding a field to `SCHEMAS`).
+
+To import by hand instead: PocketBase Admin UI → **Settings → Import
+collections** → paste the contents of `schema/collections.blueprint.json`.
+On an instance that already has the collections, prefer `npm run schema:push` —
+it attaches the existing collection ids so PocketBase updates in place rather
+than erroring on the name conflict.
+
+> Note on data model: tracking updates (`checkpoints`) and customer details
+> (`sender_*` / `recipient_*`) intentionally live **inside** each `shipments`
+> record rather than in separate tables — the API and admin UI read them from
+> there.
 
 ## Migrating from MongoDB Atlas (one time)
 

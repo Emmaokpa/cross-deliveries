@@ -39,7 +39,8 @@ const PRIVATE = { listRule: null, viewRule: null, createRule: null, updateRule: 
 // They keep the migration re-runnable and make sure migrated records keep
 // their original creation date — PocketBase's HTTP API otherwise refuses to
 // let us write `created`/`updated` directly.
-const SCHEMAS = {
+// Exported for scripts/schema.mjs (schema blueprint export / push / verify).
+export const SCHEMAS = {
   [COLLECTIONS.admins]: {
     name: COLLECTIONS.admins,
     type: 'base',

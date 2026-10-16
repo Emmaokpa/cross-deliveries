@@ -1,0 +1,310 @@
+[
+  {
+    "name": "admins",
+    "type": "base",
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "name": "email",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "password_hash",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "select",
+        "values": [
+          "super_admin",
+          "admin"
+        ],
+        "maxSelect": 1
+      },
+      {
+        "name": "active",
+        "type": "bool"
+      },
+      {
+        "name": "must_reset_password",
+        "type": "bool"
+      },
+      {
+        "name": "legacy_id",
+        "type": "text"
+      },
+      {
+        "name": "legacy_created",
+        "type": "date"
+      },
+      {
+        "name": "legacy_updated",
+        "type": "date"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_admins_email ON admins (email) WHERE email != ''"
+    ]
+  },
+  {
+    "name": "shipments",
+    "type": "base",
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "name": "tracking_number",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "sender_name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "sender_email",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "sender_phone",
+        "type": "text"
+      },
+      {
+        "name": "sender_address",
+        "type": "text"
+      },
+      {
+        "name": "recipient_name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "recipient_email",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "recipient_phone",
+        "type": "text"
+      },
+      {
+        "name": "recipient_address",
+        "type": "text"
+      },
+      {
+        "name": "recipient_city",
+        "type": "text"
+      },
+      {
+        "name": "recipient_country",
+        "type": "text"
+      },
+      {
+        "name": "origin_city",
+        "type": "text"
+      },
+      {
+        "name": "destination_city",
+        "type": "text"
+      },
+      {
+        "name": "cargo_type",
+        "type": "select",
+        "values": [
+          "Air",
+          "Ocean",
+          "Road"
+        ],
+        "maxSelect": 1
+      },
+      {
+        "name": "package_weight",
+        "type": "number"
+      },
+      {
+        "name": "package_dimensions",
+        "type": "text"
+      },
+      {
+        "name": "package_quantity",
+        "type": "number"
+      },
+      {
+        "name": "package_description",
+        "type": "text"
+      },
+      {
+        "name": "base_freight",
+        "type": "number"
+      },
+      {
+        "name": "surcharge_fuel",
+        "type": "number"
+      },
+      {
+        "name": "surcharge_customs",
+        "type": "number"
+      },
+      {
+        "name": "total_cost",
+        "type": "number"
+      },
+      {
+        "name": "currency",
+        "type": "select",
+        "values": [
+          "NGN",
+          "USD",
+          "EUR",
+          "GBP",
+          "JPY",
+          "KRW",
+          "CNY",
+          "INR",
+          "CAD",
+          "AUD",
+          "CHF",
+          "ZAR",
+          "AED",
+          "GHS",
+          "KES",
+          "TRY",
+          "BRL",
+          "SAR",
+          "QAR",
+          "EGP"
+        ],
+        "maxSelect": 1
+      },
+      {
+        "name": "payment_status",
+        "type": "select",
+        "values": [
+          "Paid",
+          "Unpaid",
+          "Pending"
+        ],
+        "maxSelect": 1
+      },
+      {
+        "name": "current_status",
+        "type": "select",
+        "values": [
+          "Created",
+          "Shipped",
+          "In Transit",
+          "Held at Customs",
+          "Out for Delivery",
+          "Delivered",
+          "On Hold"
+        ],
+        "maxSelect": 1
+      },
+      {
+        "name": "progress_percentage",
+        "type": "number",
+        "min": 0,
+        "max": 100
+      },
+      {
+        "name": "estimated_delivery",
+        "type": "date"
+      },
+      {
+        "name": "email_sent_at",
+        "type": "date"
+      },
+      {
+        "name": "delivered_at",
+        "type": "date"
+      },
+      {
+        "name": "pod",
+        "type": "json"
+      },
+      {
+        "name": "checkpoints",
+        "type": "json"
+      },
+      {
+        "name": "legacy_id",
+        "type": "text"
+      },
+      {
+        "name": "legacy_created",
+        "type": "date"
+      },
+      {
+        "name": "legacy_updated",
+        "type": "date"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_shipments_tracking ON shipments (tracking_number) WHERE tracking_number != ''"
+    ]
+  },
+  {
+    "name": "audit_logs",
+    "type": "base",
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "name": "admin_id",
+        "type": "text"
+      },
+      {
+        "name": "admin_email",
+        "type": "text"
+      },
+      {
+        "name": "action",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "entity_type",
+        "type": "text"
+      },
+      {
+        "name": "entity_id",
+        "type": "text"
+      },
+      {
+        "name": "details",
+        "type": "text"
+      },
+      {
+        "name": "legacy_id",
+        "type": "text"
+      },
+      {
+        "name": "legacy_created",
+        "type": "date"
+      },
+      {
+        "name": "legacy_updated",
+        "type": "date"
+      }
+    ]
+  }
+]

@@ -11,7 +11,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --env-file-if-exists=.env --watch src/index.js",
-    "migrate:mongodb": "node --env-file-if-exists=.env scripts/migrate-from-mongodb.mjs"
+    "migrate:mongodb": "node --env-file-if-exists=.env scripts/migrate-from-mongodb.mjs",
+    "schema:export": "node --env-file-if-exists=.env scripts/schema.mjs export",
+    "schema:push": "node --env-file-if-exists=.env scripts/schema.mjs push",
+    "schema:verify": "node --env-file-if-exists=.env scripts/schema.mjs verify"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
