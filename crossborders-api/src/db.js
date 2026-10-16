@@ -147,6 +147,10 @@ export const SCHEMAS = {
       { name: 'shipment_id', type: 'text' },
       { name: 'tracking_number', type: 'text' },
       { name: 'sent_by', type: 'text' }, // admin email (or 'system')
+      // inbound replies (services/mail-sync.js):
+      { name: 'from_email', type: 'text' }, // sender of a received reply
+      { name: 'body_text', type: 'text' }, // plain-text body of a received reply
+      { name: 'message_id', type: 'text' }, // MIME Message-ID — dedupe key
       ...TIMESTAMPS,
     ],
   },
@@ -169,6 +173,11 @@ const SUPERUSER_EMAIL = (process.env.POCKETBASE_ADMIN_EMAIL || '').trim()
 const SUPERUSER_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD || ''
 
 export const pb = new PocketBase(POCKETBASE_URL || 'http://pocketbase-not-configured.invalid')
+// The SDK's auto-cancellation aborts concurrent requests with the same
+// request key — several routes hit the same record at once on a page load,
+// which made admins get signed out at random. Requests are server-side and
+// cheap; never auto-cancel them.
+pb.autoCancellation(false)
 
 const AUTH_REFRESH_MS = 30 * 60 * 1000 // refresh the superuser token every 30 min
 const AUTH_FAILURE_COOLDOWN_MS = 15 * 1000 // after a failed login, don't hammer PocketBase for 15s

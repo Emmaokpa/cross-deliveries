@@ -7,12 +7,14 @@ const STATUS = {
   sent: { label: 'Sent', bg: '#ecfdf5', fg: '#047857' },
   failed: { label: 'Failed', bg: '#fef2f2', fg: '#b91c1c' },
   simulated: { label: 'Simulated', bg: '#fffbeb', fg: '#b45309' },
+  received: { label: 'Reply', bg: '#eff6ff', fg: '#1d4ed8' },
 }
 
 export default function Mail() {
   const [emails, setEmails] = useState([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState(null) // id of the open reply row
 
   const load = useCallback(() => {
     setLoading(true)
@@ -29,7 +31,7 @@ export default function Mail() {
   const filtered = emails.filter(
     (m) =>
       !q ||
-      [m.to_email, m.subject, m.kind, m.tracking_number, m.sent_by, m.error]
+      [m.to_email, m.from_email, m.subject, m.kind, m.tracking_number, m.sent_by, m.error, m.body_text]
         .join(' ')
         .toLowerCase()
         .includes(q.toLowerCase()),
@@ -66,7 +68,7 @@ export default function Mail() {
                 <th>Time</th>
                 <th>Status</th>
                 <th>Type</th>
-                <th>To</th>
+                <th>To / From</th>
                 <th>Subject</th>
                 <th>Shipment</th>
                 <th>Sent by</th>
@@ -75,8 +77,15 @@ export default function Mail() {
             <tbody>
               {filtered.map((m) => {
                 const s = STATUS[m.status] || { label: m.status || '—', bg: '#f3f4f6', fg: '#4b5563' }
-                return (
-                  <tr key={m.id}>
+                const isReply = m.status === 'received'
+                const open = expanded === m.id
+                return [
+                  <tr
+                    key={m.id}
+                    onClick={isReply ? () => setExpanded(open ? null : m.id) : undefined}
+                    style={isReply ? { cursor: 'pointer' } : undefined}
+                    title={isReply ? 'Click to read the full reply' : undefined}
+                  >
                     <td style={{ whiteSpace: 'nowrap', fontSize: 12.5, color: '#6b7280' }}>
                       {fmtDate(m.created_at)}
                     </td>
@@ -101,8 +110,11 @@ export default function Mail() {
                       )}
                     </td>
                     <td style={{ fontSize: 12.5, color: '#4b5563' }}>{m.kind || '—'}</td>
-                    <td>{m.to_email}</td>
-                    <td style={{ color: '#4b5563' }}>{m.subject}</td>
+                    <td>{isReply ? m.from_email || '—' : m.to_email}</td>
+                    <td style={{ color: '#4b5563' }}>
+                      {m.subject}
+                      {isReply && <span style={{ color: '#9ca3af', marginLeft: 6 }}>{open ? '▾' : '▸'}</span>}
+                    </td>
                     <td>
                       {m.tracking_number ? (
                         <Link className="mono" to={`/admin/shipments/${m.shipment_id}`}>
@@ -113,8 +125,17 @@ export default function Mail() {
                       )}
                     </td>
                     <td style={{ fontSize: 12.5, color: '#6b7280' }}>{m.sent_by || '—'}</td>
-                  </tr>
-                )
+                  </tr>,
+                  open && (
+                    <tr key={`${m.id}-body`}>
+                      <td colSpan={7} style={{ background: '#f8fafc', padding: '12px 16px' }}>
+                        <pre style={{ whiteSpace: 'pre-wrap', font: 'inherit', margin: 0, maxHeight: 300, overflow: 'auto', color: '#374151', fontSize: 13 }}>
+                          {m.body_text || '(no text body in this message)'}
+                        </pre>
+                      </td>
+                    </tr>
+                  ),
+                ]
               })}
               {!filtered.length && (
                 <tr>

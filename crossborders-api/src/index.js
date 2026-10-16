@@ -6,6 +6,7 @@ import shipmentsRouter from './routes/shipments.js'
 import publicRouter from './routes/public.js'
 import auditRouter from './routes/audit.js'
 import mailRouter from './routes/mail.js'
+import { startMailSync } from './services/mail-sync.js'
 
 const app = express()
 app.disable('x-powered-by')
@@ -98,4 +99,5 @@ const PORT = process.env.PORT || 8787
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[server] CrossBorders API running on http://localhost:${PORT}`)
   connectDB()
+  startMailSync() // customer replies via IMAP (no-op when not configured)
 })

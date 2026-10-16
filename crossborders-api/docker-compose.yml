@@ -14,6 +14,8 @@
 #   Email (Hostinger SMTP): SMTP_HOST=smtp.hostinger.com, SMTP_PORT=465,
 #     SMTP_USER=<full Hostinger email>, SMTP_PASS=<mailbox password>,
 #     MAIL_FROM=<full Hostinger email>. Leave BREVO_API_KEY blank.
+#   Inbound replies (IMAP): IMAP_HOST=imap.hostinger.com, IMAP_PORT=993,
+#     IMAP_USER=<same mailbox>, IMAP_PASS=<same password>.
 # ---------------------------------------------------------------------------
 
 services:
@@ -66,6 +68,12 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+      # Inbound replies (IMAP, same Hostinger mailbox) — shown in Admin → Mail
+      IMAP_HOST: ${IMAP_HOST:-}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASS: ${IMAP_PASS:-}
+      IMAP_POLL_MINUTES: ${IMAP_POLL_MINUTES:-5}
     # Coolify routes traffic to the container on PORT (8787).
     expose:
       - "8787"

@@ -46,18 +46,21 @@ function escapeHtml(s = '') {
 
 // ─────────────────────────────────────────────────────────────────
 // LETTERHEAD — HARDCODED. The official logo (assets/logo.png, the
-// red-and-dark stylized "X" mark) is embedded as a data URI so the
-// banner renders identically in every email client, browser preview
-// and PDF export. Falls back to the CID image if the asset is absent.
+// red-and-dark stylized "X" mark) is referenced by CID and attached
+// inline with the message. NOTE: most mail clients (Gmail, Outlook,
+// Yahoo…) silently strip base64 `data:` URI images from received
+// mail, which made the letterhead logo disappear — CID is the only
+// embedding that renders reliably everywhere.
 // ─────────────────────────────────────────────────────────────────
-let logoDataUriCache = null
 function logoSrc() {
-  if (logoDataUriCache === null) {
-    logoDataUriCache = fs.existsSync(LOGO_PATH)
-      ? `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}`
-      : `cid:${LOGO_CID}`
-  }
-  return logoDataUriCache
+  return `cid:${LOGO_CID}`
+}
+
+/** Inline logo attachment matching the CID referenced by the letterhead. */
+function logoAttachment() {
+  return fs.existsSync(LOGO_PATH)
+    ? [{ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID }]
+    : []
 }
 
 // Brand banner: soft pink-tinted gradient strip with the logo mark on the
@@ -609,10 +612,8 @@ export async function sendShipmentEmail(shipment, admin) {
   })
   const attachments = [
     { filename: `${shipment.tracking_number}-invoice.pdf`, content: invoicePdf, contentType: 'application/pdf' },
+    ...logoAttachment(),
   ]
-  if (fs.existsSync(LOGO_PATH)) {
-    attachments.push({ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID })
-  }
 
   return deliverMail({ to, subject, html, attachments, shipment, admin, label: 'Invoice/status email' })
 }
@@ -709,5 +710,5 @@ export async function sendConfirmationEmail(shipment, admin) {
   const to = shipment.recipient_email
   const subject = `Official Notification of Incoming Shipment — ${shipment.tracking_number}`
   const html = renderConfirmationLetter(shipment)
-  return deliverMail({ to, subject, html, attachments: [], shipment, admin, label: 'Confirmation letter' })
+  return deliverMail({ to, subject, html, attachments: logoAttachment(), shipment, admin, label: 'Confirmation letter' })
 }

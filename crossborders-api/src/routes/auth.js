@@ -30,15 +30,28 @@ export async function authRequired(req, res, next) {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
   if (!token) return res.status(401).json({ error: 'Authentication required' })
+
+  // 401 = genuinely not authenticated (bad/expired token). Keep this try
+  // block strictly around the JWT check so a database hiccup can never be
+  // mistaken for an expired session (that randomly signed admins out).
+  let payload
   try {
-    const payload = jwt.verify(token, JWT_SECRET)
-    const admin = payload.sub ? await findRecord(COLLECTIONS.admins, payload.sub) : null
-    if (!admin || admin.active !== true) return res.status(401).json({ error: 'Account is deactivated' })
-    req.admin = admin
-    next()
+    payload = jwt.verify(token, JWT_SECRET)
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' })
   }
+
+  let admin = null
+  try {
+    admin = payload.sub ? await findRecord(COLLECTIONS.admins, payload.sub) : null
+  } catch {
+    // Valid token, but the database lookup failed (PocketBase restarting or
+    // unreachable). 503 tells the frontend to retry WITHOUT signing out.
+    return res.status(503).json({ error: 'Database is busy — please try again in a moment' })
+  }
+  if (!admin || admin.active !== true) return res.status(401).json({ error: 'Account is deactivated' })
+  req.admin = admin
+  next()
 }
 
 export function superAdminOnly(req, res, next) {

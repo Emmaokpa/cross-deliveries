@@ -4,14 +4,34 @@ import { api, getToken, setToken } from './api.js'
 
 export default function AdminLayout() {
   const [admin, setAdmin] = useState(null)
+  const [authError, setAuthError] = useState(null)
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!getToken()) return navigate('/admin/login')
-    api('/auth/me')
-      .then((d) => setAdmin(d.admin))
-      .catch(() => navigate('/admin/login'))
+    let cancelled = false
+    let attempt = 0
+    const load = () => {
+      api('/auth/me')
+        .then((d) => {
+          if (cancelled) return
+          setAuthError(null)
+          setAdmin(d.admin)
+        })
+        .catch((e) => {
+          if (cancelled) return
+          // Only a real auth failure (401) signs the admin out. Transient
+          // errors (PocketBase restarting, 5xx, network blips) are retried
+          // instead of dumping a logged-in admin back on the login screen.
+          if (e?.status === 401) return navigate('/admin/login')
+          attempt += 1
+          if (attempt >= 5) return setAuthError(e?.message || 'Could not reach the server')
+          setTimeout(load, 3000)
+        })
+    }
+    load()
+    return () => { cancelled = true }
   }, [navigate])
 
   useEffect(() => {
@@ -25,7 +45,20 @@ export default function AdminLayout() {
     navigate('/admin/login')
   }
 
-  if (!admin) return <div className="admin-root" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>Loading…</div>
+  if (!admin) {
+    return (
+      <div className="admin-root" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: '#6b7280' }}>
+        {authError ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ marginBottom: 12 }}>⚠️ {authError}</div>
+            <button className="btn-ghost-a btn-sm-a" onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        ) : (
+          'Loading…'
+        )}
+      </div>
+    )
+  }
 
   const initials = admin.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 

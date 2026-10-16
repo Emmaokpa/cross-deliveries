@@ -52,7 +52,9 @@ export async function api(path, { method = 'GET', body, isForm = false } = {}) {
     if (token) {
       setToken(null)
       window.dispatchEvent(new Event('cbd:logout'))
-      throw new Error('Session expired — please sign in again')
+      const err = new Error('Session expired — please sign in again')
+      err.status = 401
+      throw err
     }
   }
   if (!res.ok) {
@@ -61,7 +63,9 @@ export async function api(path, { method = 'GET', body, isForm = false } = {}) {
       const data = await res.json()
       if (data?.error) msg = data.error
     } catch { /* ignore parse errors */ }
-    throw new Error(msg)
+    const err = new Error(msg)
+    err.status = res.status
+    throw err
   }
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('application/pdf')) return res.blob()

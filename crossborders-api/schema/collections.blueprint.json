@@ -379,6 +379,18 @@
         "type": "text"
       },
       {
+        "name": "from_email",
+        "type": "text"
+      },
+      {
+        "name": "body_text",
+        "type": "text"
+      },
+      {
+        "name": "message_id",
+        "type": "text"
+      },
+      {
         "name": "created_at",
         "type": "date"
       },
