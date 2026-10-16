@@ -7,6 +7,7 @@ import Shipments from './Shipments.jsx'
 import ShipmentDetail from './ShipmentDetail.jsx'
 import Users from './Users.jsx'
 import AuditLog from './AuditLog.jsx'
+import Mail from './Mail.jsx'
 
 export default function AdminRoot() {
   return (
@@ -19,6 +20,7 @@ export default function AdminRoot() {
           <Route path="shipments/:id" element={<ShipmentDetail />} />
           <Route path="users" element={<Users />} />
           <Route path="audit" element={<AuditLog />} />
+          <Route path="mail" element={<Mail />} />
         </Route>
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>

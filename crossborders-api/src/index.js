@@ -5,6 +5,7 @@ import authRouter, { adminUsersRouter } from './routes/auth.js'
 import shipmentsRouter from './routes/shipments.js'
 import publicRouter from './routes/public.js'
 import auditRouter from './routes/audit.js'
+import mailRouter from './routes/mail.js'
 
 const app = express()
 app.disable('x-powered-by')
@@ -62,6 +63,7 @@ app.use(
 // APIs
 app.use('/api/auth', authRouter)
 app.use('/api/admin', auditRouter)
+app.use('/api/admin', mailRouter)
 app.use('/api/admin', adminUsersRouter)
 app.use('/api/v1', publicRouter)
 app.use('/api/v1', shipmentsRouter)

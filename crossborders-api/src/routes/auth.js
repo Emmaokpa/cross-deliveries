@@ -110,7 +110,7 @@ router.post('/change-password', authRequired, async (req, res) => {
 
 // GET /api/admin/users (super admin)
 adminUsersRouter.get('/users', authRequired, superAdminOnly, async (req, res) => {
-  const users = await listAll(COLLECTIONS.admins, { sort: 'created' })
+  const users = await listAll(COLLECTIONS.admins, { sort: 'created_at' })
   res.json({ users: users.map(publicAdmin) })
 })
 

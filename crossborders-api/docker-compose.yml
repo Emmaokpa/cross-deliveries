@@ -11,7 +11,9 @@
 #   POCKETBASE_ADMIN_PASSWORD   superuser password
 #   CORS_ORIGINS                your frontend origin(s), comma-separated
 #   APP_DOMAIN                  public URL of the frontend
-#   (optional email) BREVO_API_KEY / SMTP_* / MAIL_FROM  — add when mails go live
+#   Email (Hostinger SMTP): SMTP_HOST=smtp.hostinger.com, SMTP_PORT=465,
+#     SMTP_USER=<full Hostinger email>, SMTP_PASS=<mailbox password>,
+#     MAIL_FROM=<full Hostinger email>. Leave BREVO_API_KEY blank.
 # ---------------------------------------------------------------------------
 
 services:
@@ -56,8 +58,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set in Coolify}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       APP_DOMAIN: ${APP_DOMAIN:-}
-      # Email (wire up later once the domain/mailbox are ready)
-      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      # Email — any SMTP provider (Hostinger: smtp.hostinger.com:465)
+      BREVO_API_KEY: ${BREVO_API_KEY:-} # leave blank unless using Brevo's HTTP API
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

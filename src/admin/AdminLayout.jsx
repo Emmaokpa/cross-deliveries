@@ -43,6 +43,7 @@ export default function AdminLayout() {
           <nav className="admin-nav" onClick={() => setOpen(false)}>
             <NavLink to="/admin" end>📊 Dashboard</NavLink>
             <NavLink to="/admin/shipments">📦 Shipments</NavLink>
+            <NavLink to="/admin/mail">✉️ Mail</NavLink>
             {admin.role === 'super_admin' && <NavLink to="/admin/users">👥 Staff Accounts</NavLink>}
             {admin.role === 'super_admin' && <NavLink to="/admin/audit">🧾 Audit Log</NavLink>}
           </nav>

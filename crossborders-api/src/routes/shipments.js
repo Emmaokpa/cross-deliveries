@@ -100,7 +100,7 @@ router.get('/shipments', async (req, res) => {
     }
     const shipments = await listAll(COLLECTIONS.shipments, {
       filter: clauses.join(' && '),
-      sort: '-created',
+      sort: '-created_at',
     })
     res.json({ shipments })
   } catch (e) {

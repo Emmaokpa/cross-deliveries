@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer'
 import fs from 'node:fs'
-import { COLLECTIONS, updateRecord } from '../db.js'
+import { COLLECTIONS, createRecord, updateRecord } from '../db.js'
 import { audit } from '../routes/auth.js'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 import { COMPANY } from './company.js'
@@ -499,6 +499,29 @@ async function sendViaBrevoApi({ to, subject, html, attachments }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// SENT-MAIL LOG — every delivery outcome (sent / failed / simulated) is
+// recorded in the `emails` PocketBase collection and shown in the admin
+// console under Admin → Mail. A logging failure never affects the send.
+// ─────────────────────────────────────────────────────────────────
+async function logEmail({ to, subject, label, shipment, admin, status, transport, error }) {
+  try {
+    await createRecord(COLLECTIONS.emails, {
+      to_email: to,
+      subject,
+      kind: label,
+      status,
+      transport,
+      error: error ? String(error).slice(0, 500) : undefined,
+      shipment_id: shipment?.id || shipment?._id || undefined,
+      tracking_number: shipment?.tracking_number || undefined,
+      sent_by: admin?.email || 'system',
+    })
+  } catch (e) {
+    console.error('[email-log] failed to record mail log:', e.message)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Generic dispatch shared by every system email. Sender identity is
 // HARDCODED to the company constants — never taken from shipment data.
 // Prefers the Brevo HTTP API (HTTPS/443 — always open), falls back to
@@ -524,10 +547,12 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
       await sendViaBrevoApi({ to, subject, html: htmlApi, attachments })
       await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
       await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via Brevo API`)
+      await logEmail({ to, subject, label, shipment, admin, status: 'sent', transport: 'brevo-api' })
       return { sent: true, to, subject, message: 'Email sent via Brevo API (HTTPS).' }
     } catch (err) {
       console.error('[brevo-api] send failed:', err.message)
       await audit(admin, 'email.failed', 'shipment', String(shipment._id), `Brevo API: ${String(err.message).slice(0, 200)}`)
+      await logEmail({ to, subject, label, shipment, admin, status: 'failed', transport: 'brevo-api', error: err.message })
       return { sent: false, error: err.message, to, subject, message: `Brevo API send failed — ${err.message}` }
     }
   }
@@ -536,7 +561,8 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
   if (!smtpConfigured()) {
     console.log(`[email:simulated] → ${to} | ${subject}`)
     await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `No BREVO_API_KEY / SMTP configured; simulated email to ${to}`)
-    return { sent: false, simulated: true, to, subject, message: 'Email not configured — simulated in logs. Set BREVO_API_KEY.' }
+    await logEmail({ to, subject, label, shipment, admin, status: 'simulated', transport: 'none' })
+    return { sent: false, simulated: true, to, subject, message: 'Email not configured — simulated in logs. Set SMTP_HOST / SMTP_USER / SMTP_PASS.' }
   }
 
   try {
@@ -550,17 +576,19 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
     })
     await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
     await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via SMTP port ${port}`)
+    await logEmail({ to, subject, label, shipment, admin, status: 'sent', transport: `smtp:${port}` })
     return { sent: true, to, subject, message: `Email sent via SMTP (port ${port}).` }
   } catch (err) {
     const { SMTP_HOST } = process.env
     const hint =
       err.code === 'ETIMEDOUT' || /timeout/i.test(err.message)
-        ? ` — could not reach ${SMTP_HOST || '(unset)'} on ports 587/2525/465. Outbound SMTP is blocked from this host — set BREVO_API_KEY (API key, not SMTP key) to send over HTTPS instead.`
+        ? ` — could not reach ${SMTP_HOST || '(unset)'} on ports 587/2525/465. Outbound SMTP may be blocked from this host — double-check the SMTP host/port settings.`
         : err.code === 'EAUTH'
           ? ' — authentication rejected by the SMTP server. Check the SMTP user/key.'
           : ''
     console.error(`[smtp] send failed (${err.code || 'error'}): ${err.message}${hint}`)
     await audit(admin, 'email.failed', 'shipment', String(shipment._id), `${err.code || 'error'}: ${String(err.message).slice(0, 200)}`)
+    await logEmail({ to, subject, label, shipment, admin, status: 'failed', transport: 'smtp', error: err.message })
     return { sent: false, error: err.message, to, subject, message: `SMTP send failed (${err.code || 'error'})${hint}` }
   }
 }

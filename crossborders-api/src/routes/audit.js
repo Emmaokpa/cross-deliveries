@@ -8,7 +8,7 @@ const router = Router()
 router.get('/audit-logs', authRequired, superAdminOnly, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 200, 500)
-    const logs = await listPage(COLLECTIONS.auditLogs, { sort: '-created', page: 1, perPage: limit })
+    const logs = await listPage(COLLECTIONS.auditLogs, { sort: '-created_at', page: 1, perPage: limit })
     res.json({ logs: logs.items })
   } catch (e) {
     res.status(500).json({ error: e.message })

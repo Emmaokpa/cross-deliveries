@@ -23,6 +23,7 @@ export const COLLECTIONS = {
   admins: 'admins',
   shipments: 'shipments',
   auditLogs: 'audit_logs',
+  emails: 'emails',
 }
 
 const ADMIN_ROLES = ['super_admin', 'admin']
@@ -40,6 +41,14 @@ const PRIVATE = { listRule: null, viewRule: null, createRule: null, updateRule: 
 // their original creation date — PocketBase's HTTP API otherwise refuses to
 // let us write `created`/`updated` directly.
 // Exported for scripts/schema.mjs (schema blueprint export / push / verify).
+// PocketBase 0.40+ no longer creates the `created`/`updated` columns on new
+// collections (and rejects sort by them), so every collection declares its
+// own timestamp fields which createRecord/updateRecord stamp automatically.
+const TIMESTAMPS = [
+  { name: 'created_at', type: 'date' },
+  { name: 'updated_at', type: 'date' },
+]
+
 export const SCHEMAS = {
   [COLLECTIONS.admins]: {
     name: COLLECTIONS.admins,
@@ -55,6 +64,7 @@ export const SCHEMAS = {
       { name: 'legacy_id', type: 'text' },
       { name: 'legacy_created', type: 'date' },
       { name: 'legacy_updated', type: 'date' },
+      ...TIMESTAMPS,
     ],
     indexes: [`CREATE UNIQUE INDEX idx_admins_email ON ${COLLECTIONS.admins} (email) WHERE email != ''`],
   },
@@ -97,6 +107,7 @@ export const SCHEMAS = {
       { name: 'legacy_id', type: 'text' },
       { name: 'legacy_created', type: 'date' },
       { name: 'legacy_updated', type: 'date' },
+      ...TIMESTAMPS,
     ],
     indexes: [
       `CREATE UNIQUE INDEX idx_shipments_tracking ON ${COLLECTIONS.shipments} (tracking_number) WHERE tracking_number != ''`,
@@ -116,6 +127,27 @@ export const SCHEMAS = {
       { name: 'legacy_id', type: 'text' },
       { name: 'legacy_created', type: 'date' },
       { name: 'legacy_updated', type: 'date' },
+      ...TIMESTAMPS,
+    ],
+  },
+  // Sent-mail log — one record per delivery attempt (sent / failed /
+  // simulated), shown in the admin console under Admin → Mail. Written by
+  // services/email.js; the SMTP/API provider is configured via SMTP_* env vars.
+  [COLLECTIONS.emails]: {
+    name: COLLECTIONS.emails,
+    type: 'base',
+    ...PRIVATE,
+    fields: [
+      { name: 'to_email', type: 'text', required: true },
+      { name: 'subject', type: 'text', required: true },
+      { name: 'kind', type: 'text' }, // 'Invoice/status email' | 'Confirmation letter'
+      { name: 'status', type: 'text' }, // 'sent' | 'failed' | 'simulated'
+      { name: 'transport', type: 'text' }, // 'smtp:465' | 'brevo-api' | 'none'
+      { name: 'error', type: 'text' },
+      { name: 'shipment_id', type: 'text' },
+      { name: 'tracking_number', type: 'text' },
+      { name: 'sent_by', type: 'text' }, // admin email (or 'system')
+      ...TIMESTAMPS,
     ],
   },
 }
@@ -298,24 +330,44 @@ export function getDbStatus() {
 // Collections
 // ---------------------------------------------------------------------------
 
-/** Create any of the application collections that are missing on the server. */
+/** Create any of the application collections that are missing on the server,
+ * and add any missing fields to collections that already exist (additive
+ * only — existing fields and records are never touched). This keeps live
+ * databases in sync with SCHEMAS on every boot, e.g. the created_at /
+ * updated_at fields introduced for PocketBase 0.40+. */
 export async function ensureCollections() {
   const existing = await pb.collections.getFullList({ sort: 'name' })
-  const existingNames = new Set(existing.map((collection) => collection.name))
+  const byName = new Map(existing.map((collection) => [collection.name, collection]))
 
   for (const schema of Object.values(SCHEMAS)) {
-    if (existingNames.has(schema.name)) continue
+    const current = byName.get(schema.name)
+
+    if (!current) {
+      try {
+        await pb.collections.create(schema)
+        console.log(`[db] Created PocketBase collection "${schema.name}"`)
+      } catch (err) {
+        if (!schema.indexes?.length) throw err
+        // Custom indexes are a nice-to-have (uniqueness is also enforced in the
+        // routes) — never let them block a boot on an SQLite syntax surprise.
+        console.warn(`[db] Could not create indexes for "${schema.name}" (${err.message}) — retrying without them`)
+        const { indexes, ...withoutIndexes } = schema
+        await pb.collections.create(withoutIndexes)
+        console.log(`[db] Created PocketBase collection "${schema.name}"`)
+      }
+      continue
+    }
+
+    // Existing collection — add any fields that SCHEMAS has but the server doesn't.
+    const have = new Set((current.fields || []).map((f) => f.name))
+    const missing = schema.fields.filter((f) => !have.has(f.name))
+    if (!missing.length) continue
     try {
-      await pb.collections.create(schema)
-      console.log(`[db] Created PocketBase collection "${schema.name}"`)
+      await pb.collections.update(current.id, { fields: [...(current.fields || []), ...missing] })
+      console.log(`[db] Added missing fields to "${schema.name}": ${missing.map((f) => f.name).join(', ')}`)
     } catch (err) {
-      if (!schema.indexes?.length) throw err
-      // Custom indexes are a nice-to-have (uniqueness is also enforced in the
-      // routes) — never let them block a boot on an SQLite syntax surprise.
-      console.warn(`[db] Could not create indexes for "${schema.name}" (${err.message}) — retrying without them`)
-      const { indexes, ...withoutIndexes } = schema
-      await pb.collections.create(withoutIndexes)
-      console.log(`[db] Created PocketBase collection "${schema.name}"`)
+      // Non-fatal: the affected columns stay empty until the next boot retries.
+      console.warn(`[db] Could not add fields to "${schema.name}" (${err.message}) — will retry on next boot`)
     }
   }
 }
@@ -430,9 +482,10 @@ function mapRecord(record) {
   }
   mapped.id = record.id
   mapped._id = record.id
-  // Migrated records keep their original MongoDB creation date.
-  mapped.created_at = record.legacy_created || record.created || null
-  mapped.updated_at = record.updated || null
+  // Priority: migrated MongoDB date → PocketBase system date (old versions)
+  // → the collection's own created_at/updated_at field (PocketBase 0.40+).
+  mapped.created_at = record.legacy_created || record.created || mapped.created_at || null
+  mapped.updated_at = record.updated || mapped.updated_at || null
   return mapped
 }
 
@@ -454,7 +507,7 @@ function buildOptions({ filter, sort } = {}) {
 // the PocketBase query and applied in JavaScript after fetching instead.
 // ---------------------------------------------------------------------------
 
-const PB_BROKEN_SORT = /\b(created|updated)\b/
+const PB_BROKEN_SORT = /\b(created|updated)(_at)?\b/
 
 /** True when the sort string relies on fields PocketBase can no longer order by. */
 function sortNeedsInMemory(sort) {
@@ -463,8 +516,8 @@ function sortNeedsInMemory(sort) {
 
 /** Read a sort key from a mapped record (system fields are remapped by mapRecord). */
 function sortValue(record, key) {
-  if (key === 'created') return record.created_at || ''
-  if (key === 'updated') return record.updated_at || ''
+  if (key === 'created' || key === 'created_at') return record.created_at || ''
+  if (key === 'updated' || key === 'updated_at') return record.updated_at || ''
   return record[key] ?? ''
 }
 
@@ -561,13 +614,18 @@ export async function countRecords(collection, filter) {
 
 export async function createRecord(collection, data) {
   await ensureAuth()
-  const record = await pb.collection(collection).create(toRecordPayload(collection, data))
+  // Stamp timestamps (PocketBase 0.40+ collections have no system dates).
+  // An explicit value in `data` (e.g. from the MongoDB migration) wins.
+  const now = new Date().toISOString()
+  const record = await pb.collection(collection).create(
+    toRecordPayload(collection, { created_at: now, updated_at: now, ...data }),
+  )
   return mapRecord(record)
 }
 
 export async function updateRecord(collection, id, data) {
   await ensureAuth()
-  const payload = toRecordPayload(collection, data)
+  const payload = toRecordPayload(collection, { updated_at: new Date().toISOString(), ...data })
   const record = await pb.collection(collection).update(id, payload)
   return mapRecord(record)
 }
