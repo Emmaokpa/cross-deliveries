@@ -83,8 +83,8 @@ docker exec -it <pocketbase-container> ./pocketbase superuser upsert admin@examp
 | Variable | Purpose |
 |---|---|
 | `POCKETBASE_URL` | URL of your self-hosted PocketBase instance (**required**) |
-| `POCKETBASE_ADMIN_EMAIL` | PocketBase superuser email used by the API (**required**) |
-| `POCKETBASE_ADMIN_PASSWORD` | PocketBase superuser password (**required**) |
+| `POCKETBASE_ADMIN_EMAIL` | PocketBase superuser email used by the API (**needed for data access; the server boots without it**) |
+| `POCKETBASE_ADMIN_PASSWORD` | PocketBase superuser password (**needed for data access; the server boots without it**) |
 | `JWT_SECRET` | Long random string for signing admin tokens (**required**) |
 | `PORT` | Port to listen on (default `8787`) |
 | `APP_DOMAIN` | Public frontend URL — used in tracking links inside emails/PDFs |
@@ -95,5 +95,6 @@ docker exec -it <pocketbase-container> ./pocketbase superuser upsert admin@examp
 
 ## Notes
 
+- The server always starts and `/api/health` always answers, even if PocketBase is still booting or superuser credentials are missing/wrong — PocketBase init runs in the background and is retried every 30s.
 - On first boot it seeds a super admin: `admin@gmail.com` / `password123`. Change it immediately.
 - The API never serves the frontend build; point the frontend's `VITE_API_URL` at this server instead.

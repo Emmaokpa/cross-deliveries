@@ -138,9 +138,20 @@ const SUPERUSER_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD || ''
 export const pb = new PocketBase(POCKETBASE_URL || 'http://pocketbase-not-configured.invalid')
 
 const AUTH_REFRESH_MS = 30 * 60 * 1000 // refresh the superuser token every 30 min
+const AUTH_FAILURE_COOLDOWN_MS = 15 * 1000 // after a failed login, don't hammer PocketBase for 15s
+const INIT_RETRY_MS = 30 * 1000 // retry a failed boot-time init in the background
 let lastAuthAt = 0
+let lastAuthError = null
+let authRetryAfter = 0
 let pendingAuth = null
 let refreshTimer = null
+let initTimer = null
+
+// Report-only state surfaced by /api/health. It never gates the server boot:
+// the Express process listens first and PocketBase catches up afterwards.
+let dbReady = false
+let dbAuthenticated = false
+let lastInitError = null
 
 function validateEnv() {
   if (!POCKETBASE_URL) {
@@ -148,23 +159,46 @@ function validateEnv() {
       'POCKETBASE_URL is not set. Copy .env.example to .env and add your self-hosted PocketBase URL.',
     )
   }
+}
+
+/** Superuser credentials are needed for data access, but never for booting. */
+function requireSuperuser() {
   if (!SUPERUSER_EMAIL || !SUPERUSER_PASSWORD) {
     throw new Error(
-      'POCKETBASE_ADMIN_EMAIL and POCKETBASE_ADMIN_PASSWORD are not set. They are the superuser credentials the API uses to talk to PocketBase.',
+      'POCKETBASE_ADMIN_EMAIL and POCKETBASE_ADMIN_PASSWORD are not set. They are the superuser credentials the API uses to talk to PocketBase; the server still boots, but data requests fail until both are configured.',
     )
   }
 }
 
-/** Authenticate as the PocketBase superuser (throttled to once per 30 min). */
+/**
+ * Authenticate as the PocketBase superuser (throttled to once per 30 min).
+ * Lazy: called on first data access, so a missing or failing admin login never
+ * blocks the server boot. Returns true once authenticated; throws when the
+ * credentials are missing or the last attempt failed (fail-fast during a
+ * short cooldown so a broken PocketBase isn't hammered by every request).
+ */
 export async function ensureAuth({ force = false } = {}) {
-  if (!force && Date.now() - lastAuthAt < AUTH_REFRESH_MS) return
+  requireSuperuser()
+  if (!force && Date.now() - lastAuthAt < AUTH_REFRESH_MS) return true
   if (pendingAuth) return pendingAuth
+  if (lastAuthError && Date.now() < authRetryAfter) throw lastAuthError
+
   pendingAuth = (async () => {
     await pb.collection('_superusers').authWithPassword(SUPERUSER_EMAIL, SUPERUSER_PASSWORD)
     lastAuthAt = Date.now()
-  })().finally(() => {
-    pendingAuth = null
-  })
+    lastAuthError = null
+    authRetryAfter = 0
+    dbAuthenticated = true
+  })()
+    .catch((err) => {
+      lastAuthError = err
+      dbAuthenticated = false
+      authRetryAfter = Date.now() + AUTH_FAILURE_COOLDOWN_MS
+      throw err
+    })
+    .finally(() => {
+      pendingAuth = null
+    })
   return pendingAuth
 }
 
@@ -180,17 +214,83 @@ export async function initPocketBase({ seed = false } = {}) {
   if (seed) await seedSuperAdmin()
   if (!refreshTimer) {
     refreshTimer = setInterval(() => {
-      ensureAuth({ force: true }).catch((err) => console.error('[db] PocketBase token refresh failed:', err.message))
+      ensureAuth({ force: true })
+        .then(() => {
+          lastInitError = null
+        })
+        .catch((err) => {
+          lastInitError = err
+          console.error('[db] PocketBase token refresh failed:', err.message)
+        })
     }, AUTH_REFRESH_MS)
     refreshTimer.unref?.()
   }
   return pb
 }
 
-/** Used by src/index.js on boot. */
+function scheduleInitRetry() {
+  if (initTimer) return
+  initTimer = setTimeout(() => {
+    initTimer = null
+    connectDB() // connectDB never rejects
+  }, INIT_RETRY_MS)
+  initTimer.unref?.()
+}
+
+/**
+ * Boot the database layer for the server (used by src/index.js).
+ *
+ * NEVER rejects: the Express server is already listening, and PocketBase
+ * being unreachable, slow to start, or missing superuser credentials must
+ * not crash the process or fail the container healthcheck (Coolify rolls a
+ * failed healthcheck back). Failures are logged and retried in the
+ * background; data routes surface the real error per-request via
+ * ensureAuth().
+ */
 export async function connectDB() {
-  await initPocketBase({ seed: true })
-  console.log('[db] PocketBase connected:', pb.baseUrl)
+  if (!POCKETBASE_URL) {
+    lastInitError = new Error('POCKETBASE_URL is not set')
+    console.warn(
+      '[db] POCKETBASE_URL is not set — the API is running but cannot reach PocketBase. Set it and restart.',
+    )
+    return // env won't change without a redeploy; retrying would only add noise
+  }
+  if (!SUPERUSER_EMAIL || !SUPERUSER_PASSWORD) {
+    lastInitError = new Error('POCKETBASE_ADMIN_EMAIL / POCKETBASE_ADMIN_PASSWORD are not set')
+    console.warn(
+      '[db] Superuser credentials not set — skipping boot-time admin authentication. The API is up; data requests will fail until POCKETBASE_ADMIN_EMAIL and POCKETBASE_ADMIN_PASSWORD are provided.',
+    )
+    return // not retryable: credentials only change on redeploy
+  }
+
+  try {
+    await initPocketBase({ seed: true })
+    dbReady = true
+    lastInitError = null
+    console.log('[db] PocketBase connected:', pb.baseUrl)
+  } catch (err) {
+    dbReady = false
+    lastInitError = err
+    console.warn(
+      `[db] PocketBase init failed: ${err.message} — the API stays up and retries in ${INIT_RETRY_MS / 1000}s`,
+    )
+    scheduleInitRetry() // transient (PocketBase still starting, auth timing, network)
+  }
+}
+
+/**
+ * Snapshot for /api/health. Report-only — the health endpoint stays 200
+ * regardless of these values so a slow or unauthenticated PocketBase never
+ * fails the container healthcheck.
+ */
+export function getDbStatus() {
+  return {
+    configured: Boolean(POCKETBASE_URL),
+    superuserConfigured: Boolean(SUPERUSER_EMAIL && SUPERUSER_PASSWORD),
+    ready: dbReady,
+    authenticated: dbAuthenticated,
+    error: lastInitError ? String(lastInitError.message || lastInitError) : null,
+  }
 }
 
 // ---------------------------------------------------------------------------

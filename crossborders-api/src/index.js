@@ -1,6 +1,6 @@
 import express from 'express'
 import cors from 'cors'
-import { connectDB } from './db.js'
+import { connectDB, getDbStatus } from './db.js'
 import authRouter, { adminUsersRouter } from './routes/auth.js'
 import shipmentsRouter from './routes/shipments.js'
 import publicRouter from './routes/public.js'
@@ -66,8 +66,17 @@ app.use('/api/admin', adminUsersRouter)
 app.use('/api/v1', publicRouter)
 app.use('/api/v1', shipmentsRouter)
 
-// Health check
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'crossborders-api', time: new Date().toISOString() }))
+// Health check — always 200 while the process is alive. PocketBase auth may
+// still be settling (or unconfigured); report its state, never fail on it, so
+// container healthchecks (Coolify/Docker) don't flap during boot.
+app.get('/api/health', (req, res) =>
+  res.json({
+    ok: true,
+    service: 'crossborders-api',
+    time: new Date().toISOString(),
+    db: getDbStatus(),
+  }),
+)
 
 // 404 + error handling
 app.use((req, res) => res.status(404).json({ error: 'Not found' }))
@@ -80,13 +89,11 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8787
 
-connectDB()
-  .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`[server] CrossBorders API running on http://localhost:${PORT}`)
-    })
-  })
-  .catch((err) => {
-    console.error('[server] PocketBase connection failed:', err.message)
-    process.exit(1)
-  })
+// Listen first: /api/health must answer even while PocketBase is still
+// starting up or superuser credentials are missing/wrong. connectDB() never
+// rejects — it logs and retries in the background instead of crashing the
+// process (a crash here fails the Coolify healthcheck and rolls back).
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[server] CrossBorders API running on http://localhost:${PORT}`)
+  connectDB()
+})
