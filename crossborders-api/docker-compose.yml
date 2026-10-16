@@ -18,10 +18,12 @@ services:
   pocketbase:
     image: pocketbase/pocketbase:latest
     restart: unless-stopped
-    # Auto-create the superuser the API logs in with (no manual docker exec).
-    command: >
-      ./pocketbase serve --http=0.0.0.0:8090
-      --superuser="${POCKETBASE_ADMIN_EMAIL}" "${POCKETBASE_ADMIN_PASSWORD}"
+    # NOTE: the old `--superuser` flag was removed in recent PocketBase
+    # versions (it crashes the container). Create the superuser ONCE after the
+    # first boot instead:
+    #   docker exec -it <pocketbase-container> ./pocketbase superuser upsert <email> <password>
+    # and keep the same values in POCKETBASE_ADMIN_EMAIL / POCKETBASE_ADMIN_PASSWORD.
+    command: ./pocketbase serve --http=0.0.0.0:8090
     environment:
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL:?set in Coolify}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD:?set in Coolify}

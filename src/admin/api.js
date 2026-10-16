@@ -46,9 +46,14 @@ export async function api(path, { method = 'GET', body, isForm = false } = {}) {
   }
 
   if (res.status === 401) {
-    setToken(null)
-    window.dispatchEvent(new Event('cbd:logout'))
-    throw new Error('Session expired — please sign in again')
+    // 401 while carrying a token = expired/invalid session → kick to login.
+    // 401 with no token (wrong email/password on the login form) is a normal
+    // auth failure — let the block below surface the server's real message.
+    if (token) {
+      setToken(null)
+      window.dispatchEvent(new Event('cbd:logout'))
+      throw new Error('Session expired — please sign in again')
+    }
   }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`

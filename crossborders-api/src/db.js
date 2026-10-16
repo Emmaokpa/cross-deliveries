@@ -443,6 +443,54 @@ function buildOptions({ filter, sort } = {}) {
   return options
 }
 
+// ---------------------------------------------------------------------------
+// Sorting workaround
+//
+// PocketBase 0.39+ (including the current `latest` image) rejects ORDER BY on
+// the system `created` / `updated` columns with a 400 ("Something went wrong
+// while processing your request."), which made every list endpoint (shipments,
+// staff accounts, audit logs) fail with a 500. Sorting by any other field
+// still works. So sorts that reference `created`/`updated` are stripped from
+// the PocketBase query and applied in JavaScript after fetching instead.
+// ---------------------------------------------------------------------------
+
+const PB_BROKEN_SORT = /\b(created|updated)\b/
+
+/** True when the sort string relies on fields PocketBase can no longer order by. */
+function sortNeedsInMemory(sort) {
+  return Boolean(sort) && PB_BROKEN_SORT.test(sort)
+}
+
+/** Read a sort key from a mapped record (system fields are remapped by mapRecord). */
+function sortValue(record, key) {
+  if (key === 'created') return record.created_at || ''
+  if (key === 'updated') return record.updated_at || ''
+  return record[key] ?? ''
+}
+
+/** Sort mapped records in memory, mirroring PocketBase's `sort` syntax ("-created,email"). */
+export function sortRecordsInMemory(items, sort) {
+  const keys = String(sort || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+  if (!keys.length) return items
+
+  return [...items].sort((a, b) => {
+    for (const raw of keys) {
+      const desc = raw.startsWith('-')
+      const key = raw.replace(/^[+-]/, '')
+      const av = sortValue(a, key)
+      const bv = sortValue(b, key)
+      let cmp = 0
+      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv
+      else cmp = String(av).localeCompare(String(bv))
+      if (cmp) return desc ? -cmp : cmp
+    }
+    return 0
+  })
+}
+
 /** Fetch a record by its PocketBase id. Returns null when it doesn't exist. */
 export async function findRecord(collection, id) {
   if (!id) return null
@@ -468,6 +516,16 @@ export async function findOne(collection, filter) {
 
 /** One page of records, already mapped. */
 export async function listPage(collection, { filter, sort, page = 1, perPage = 100 } = {}) {
+  if (sortNeedsInMemory(sort)) {
+    // See PB_BROKEN_SORT note above: fetch everything, sort in JS, then slice.
+    const all = await listAll(collection, { filter, sort })
+    const start = (page - 1) * perPage
+    return {
+      items: all.slice(start, start + perPage),
+      totalItems: all.length,
+      totalPages: Math.ceil(all.length / perPage),
+    }
+  }
   await ensureAuth()
   const result = await pb.collection(collection).getList(page, perPage, buildOptions({ filter, sort }))
   return {
@@ -479,12 +537,17 @@ export async function listPage(collection, { filter, sort, page = 1, perPage = 1
 
 /** Every matching record (PocketBase paginates at 200 per request). */
 export async function listAll(collection, { filter, sort } = {}) {
+  // When the sort can't be pushed down to PocketBase, listPage would fetch
+  // everything per page — so query without the sort here and sort once at the end.
+  const pushedSort = sortNeedsInMemory(sort) ? undefined : sort
   const items = []
   let page = 1
   for (;;) {
-    const { items: batch, totalPages } = await listPage(collection, { filter, sort, page, perPage: 200 })
+    const { items: batch, totalPages } = await listPage(collection, { filter, sort: pushedSort, page, perPage: 200 })
     items.push(...batch)
-    if (batch.length === 0 || page >= totalPages) return items
+    if (batch.length === 0 || page >= totalPages) {
+      return sortNeedsInMemory(sort) ? sortRecordsInMemory(items, sort) : items
+    }
     page += 1
   }
 }
