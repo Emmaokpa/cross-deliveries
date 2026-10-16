@@ -568,8 +568,6 @@ export default function ShipmentDetail() {
             </div>
           </div>
 
-          {/* TEMP DISABLED (not used yet): the "Update Status" card below is wrapped in a JSX comment. To restore it, delete the opening marker on this block and the matching closing marker before the Proof of Delivery card. */}
-          {/*
           <div className="a-card a-card-pad">
             <h3 style={{ margin: '0 0 12px', color: 'var(--a-navy)' }}>Update Status</h3>
             <form onSubmit={updateStatus}>
@@ -602,7 +600,6 @@ export default function ShipmentDetail() {
               <button className="btn-a btn-primary-a" disabled={busy}>{busy ? 'Updating…' : 'Apply Status Update'}</button>
             </form>
           </div>
-          */}
 
           {/* TEMP DISABLED (not used yet): the "Proof of Delivery" card below is wrapped in a JSX comment. To restore it, delete this opening marker and the matching closing marker right before the Checkpoint Timeline card. */}
           {/*
