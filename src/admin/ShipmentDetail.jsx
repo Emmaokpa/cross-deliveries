@@ -4,6 +4,7 @@ import { api, downloadBlob } from './api.js'
 import { Badge, Field, Modal, Progress, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
 import { CURRENCIES } from './currencies.js'
+import { parseDate } from '../dates.js'
 import { COMPANY } from './company.js'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
@@ -300,8 +301,9 @@ export default function ShipmentDetail() {
   }
 
   const openCpEdit = (cp) => {
+    const ts = parseDate(cp.timestamp)
     setCpForm({
-      timestamp: cp.timestamp ? new Date(cp.timestamp).toISOString().slice(0, 16) : '',
+      timestamp: !Number.isNaN(ts.getTime()) ? ts.toISOString().slice(0, 16) : '',
       location: cp.location,
       status_tag: cp.status_tag,
       admin_notes: cp.admin_notes || '',
@@ -467,7 +469,8 @@ export default function ShipmentDetail() {
   }
 
   const openEtaEdit = () => {
-    setEtaValue(s.estimated_delivery ? new Date(s.estimated_delivery).toISOString().slice(0, 16) : '')
+    const eta = parseDate(s.estimated_delivery)
+    setEtaValue(!Number.isNaN(eta.getTime()) ? eta.toISOString().slice(0, 16) : '')
     setEtaEdit(true)
   }
 

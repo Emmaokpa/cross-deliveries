@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useState } from 'react'
 import { formatMoney } from './currencies.js'
+import { fmtDate } from '../dates.js'
 import { COMPANY } from './company.js'
+
+// Dates: one robust shared implementation (src/dates.js) that understands
+// PocketBase's "YYYY-MM-DD HH:MM:SS.mmmZ" as well as standard ISO strings.
+export { fmtDate }
 
 // ---------- Toasts ----------
 const ToastCtx = createContext(() => {})
@@ -119,8 +124,4 @@ export function fmtMoney(n, currency = 'USD') {
   return formatMoney(n, currency)
 }
 
-export function fmtDate(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
+

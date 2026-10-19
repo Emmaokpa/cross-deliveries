@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { fmtDate } from '../dates.js'
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
@@ -97,7 +98,7 @@ export default function TrackForm() {
               <p className="font-heading text-lg font-bold text-[#0E6B39]">✓ DELIVERED</p>
               {result.delivered_at && (
                 <p className="text-[13px] text-[#2F6B4C]">
-                  {new Date(result.delivered_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  {fmtDate(result.delivered_at)}
                 </p>
               )}
               {result.pod?.receiver_name && (
@@ -110,7 +111,7 @@ export default function TrackForm() {
           {result.estimated_delivery && result.current_status !== 'Delivered' && (
             <p className="mt-3 rounded-sm bg-[#f2f7f3] px-3 py-2 text-[13.5px] text-[#0E6B39]">
               Estimated delivery:{' '}
-              <strong>{new Date(result.estimated_delivery).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</strong>
+              <strong>{fmtDate(result.estimated_delivery)}</strong>
             </p>
           )}
           <p className="mt-2">
@@ -135,7 +136,7 @@ export default function TrackForm() {
                         {cp.status_tag}
                       </span>
                     </div>
-                    <div className="text-[0.82rem] text-muted">{new Date(cp.timestamp).toLocaleString()}</div>
+                    <div className="text-[0.82rem] text-muted">{fmtDate(cp.timestamp)}</div>
                     {cp.admin_notes && <div className="mt-0.5 text-sm text-muted">{cp.admin_notes}</div>}
                   </li>
                 ))}
