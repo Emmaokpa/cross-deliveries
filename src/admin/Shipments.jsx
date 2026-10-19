@@ -11,7 +11,8 @@ const EMPTY_FORM = {
   recipient_name: '', recipient_email: '', recipient_phone: '', recipient_address: '',
   recipient_city: '', recipient_country: '', origin_city: '', destination_city: '',
   cargo_type: 'Air', package_weight: '', package_quantity: 1, package_description: '',
-  base_freight: '', surcharge_fuel: '', surcharge_customs: '', payment_status: 'Unpaid', currency: 'NGN',
+  // Financials: one simple price (no fuel/customs fees), paid & USD by default
+  base_freight: '', surcharge_fuel: '', surcharge_customs: '', payment_status: 'Paid', currency: 'USD',
 }
 
 export default function Shipments() {
@@ -161,38 +162,44 @@ export default function Shipments() {
           <form onSubmit={create}>
             <SenderInfo />
 
-            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver details (editable)</h4>
+            {/* Every field below is OPTIONAL — nothing is required. */}
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver's details</h4>
             <div className="form-grid">
-              <Field label="Name" required><input value={form.recipient_name} onChange={setF('recipient_name')} required /></Field>
-              <Field label="Email" required><input type="email" value={form.recipient_email} onChange={setF('recipient_email')} required /></Field>
-              <Field label="Phone"><input value={form.recipient_phone} onChange={setF('recipient_phone')} /></Field>
-              <Field label="Delivery address"><input value={form.recipient_address} onChange={setF('recipient_address')} /></Field>
+              <Field label="Receiver's name"><input value={form.recipient_name} onChange={setF('recipient_name')} /></Field>
+              <Field label="Receiver's email"><input type="email" value={form.recipient_email} onChange={setF('recipient_email')} /></Field>
+              <Field label="Phone number"><input value={form.recipient_phone} onChange={setF('recipient_phone')} /></Field>
+              <Field label="Address"><input value={form.recipient_address} onChange={setF('recipient_address')} /></Field>
               <Field label="City"><input value={form.recipient_city} onChange={setF('recipient_city')} /></Field>
               <Field label="Country"><input value={form.recipient_country} onChange={setF('recipient_country')} /></Field>
             </div>
 
             <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Package & Route</h4>
             <div className="form-grid">
-              <Field label="Origin city"><input value={form.origin_city} onChange={setF('origin_city')} placeholder="Istanbul" /></Field>
-              <Field label="Destination city"><input value={form.destination_city} onChange={setF('destination_city')} placeholder="Lagos" /></Field>
-              <Field label="Cargo type">
+              <Field label="From (city)"><input value={form.origin_city} onChange={setF('origin_city')} placeholder="Istanbul" /></Field>
+              <Field label="To (city)"><input value={form.destination_city} onChange={setF('destination_city')} placeholder="Lagos" /></Field>
+              <Field label="Shipping method">
                 <select value={form.cargo_type} onChange={setF('cargo_type')}>
                   <option>Air</option><option>Ocean</option><option>Road</option>
                 </select>
               </Field>
+              {/* TEMP DISABLED — cargo weight field (restore by deleting the comment markers)
               <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={form.package_weight} onChange={setF('package_weight')} /></Field>
-              <Field label="Quantity"><input type="number" min="1" value={form.package_quantity} onChange={setF('package_quantity')} /></Field>
-              <Field label="Description"><input value={form.package_description} onChange={setF('package_description')} /></Field>
+              */}
+              <Field label="Number of packages"><input type="number" min="1" value={form.package_quantity} onChange={setF('package_quantity')} /></Field>
+              <Field label="Package contents"><input value={form.package_description} onChange={setF('package_description')} /></Field>
             </div>
 
             <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials</h4>
             <div className="form-grid">
-              <Field label="Base freight"><input type="number" step="0.01" min="0" value={form.base_freight} onChange={setF('base_freight')} /></Field>
+              {/* The price you type here IS the total the customer sees */}
+              <Field label="Price"><input type="number" step="0.01" min="0" value={form.base_freight} onChange={setF('base_freight')} /></Field>
+              {/* TEMP DISABLED — extra fees commented out; price is all-in
               <Field label="Fuel surcharge"><input type="number" step="0.01" min="0" value={form.surcharge_fuel} onChange={setF('surcharge_fuel')} /></Field>
               <Field label="Customs & handling"><input type="number" step="0.01" min="0" value={form.surcharge_customs} onChange={setF('surcharge_customs')} /></Field>
+              */}
               <Field label="Payment status">
                 <select value={form.payment_status} onChange={setF('payment_status')}>
-                  <option>Unpaid</option><option>Paid</option><option>Pending</option>
+                  <option>Paid</option><option>Unpaid</option><option>Pending</option>
                 </select>
               </Field>
               <Field label="Currency">

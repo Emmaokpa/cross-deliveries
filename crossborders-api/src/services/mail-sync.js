@@ -14,7 +14,8 @@
 // remain visible in Hostinger webmail.
 //
 // Disabled unless IMAP_HOST / IMAP_USER / IMAP_PASS are set. Poll interval:
-// IMAP_POLL_MINUTES (default 5).
+// IMAP_POLL_SECONDS (default 30) so replies show up almost instantly.
+// IMAP_POLL_MINUTES still works as a legacy override (minutes).
 // ---------------------------------------------------------------------------
 
 import { ImapFlow } from 'imapflow'
@@ -122,10 +123,17 @@ export function startMailSync() {
     console.log('[mail-sync] IMAP not configured (IMAP_HOST/IMAP_USER/IMAP_PASS) — inbound replies will not be synced')
     return
   }
-  const minutes = Math.max(1, Number(process.env.IMAP_POLL_MINUTES) || 5)
+  // Default: every 30 seconds (was 5 minutes). IMAP_POLL_SECONDS wins;
+  // legacy IMAP_POLL_MINUTES is still honoured if set and seconds isn't.
+  const seconds = Math.max(
+    5,
+    Number(process.env.IMAP_POLL_SECONDS) ||
+      (Number(process.env.IMAP_POLL_MINUTES) > 0 ? Number(process.env.IMAP_POLL_MINUTES) * 60 : 0) ||
+      30,
+  )
   const run = () => syncOnce().catch((err) => console.error('[mail-sync] sync failed:', err.message))
   run()
-  const timer = setInterval(run, minutes * 60 * 1000)
+  const timer = setInterval(run, seconds * 1000)
   timer.unref?.()
-  console.log(`[mail-sync] inbound reply sync enabled — checking ${process.env.IMAP_USER} every ${minutes} min`)
+  console.log(`[mail-sync] inbound reply sync enabled — checking ${process.env.IMAP_USER} every ${seconds}s`)
 }

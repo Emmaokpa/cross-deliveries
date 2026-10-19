@@ -17,17 +17,33 @@ export default function Inbox() {
   const [loading, setLoading] = useState(true)
   const [openMail, setOpenMail] = useState(null)
 
+  const fetchEmails = useCallback(
+    () =>
+      api('/admin/emails')
+        .then((d) => setEmails((d.emails || []).filter((m) => m.status === 'received')))
+        .catch(() => {}),
+    [],
+  )
+
   const load = useCallback(() => {
     setLoading(true)
-    api('/admin/emails')
-      .then((d) => setEmails((d.emails || []).filter((m) => m.status === 'received')))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+    fetchEmails().finally(() => setLoading(false))
+  }, [fetchEmails])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Background auto-refresh — the mailbox is synced every 30s, so re-check
+  // every 10s (skipped while the tab is hidden) and new replies show up on
+  // their own without clicking Refresh.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.hidden) return
+      fetchEmails()
+    }, 10_000)
+    return () => clearInterval(t)
+  }, [fetchEmails])
 
   const filtered = emails.filter(
     (m) =>

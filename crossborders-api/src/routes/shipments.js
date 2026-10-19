@@ -30,14 +30,21 @@ function parseShipment(body) {
     throw new Error('payment_status must be Paid, Unpaid or Pending')
   }
   if (data.currency !== undefined) {
-    data.currency = String(data.currency).toUpperCase()
-    if (!isValidCurrency(data.currency)) throw new Error('Unsupported currency')
+    const cur = String(data.currency || '').toUpperCase()
+    if (cur) {
+      if (!isValidCurrency(cur)) throw new Error('Unsupported currency')
+      data.currency = cur
+    } else {
+      delete data.currency // empty → falls back to the default (USD)
+    }
   }
   // Sender/company details are HARDCODED — any sender fields sent by a
   // client are ignored and replaced with the company constants.
   Object.assign(data, HARDCODED_SENDER)
-  if (!data.recipient_email || !data.recipient_name) {
-    throw new Error('Recipient name and email are required')
+  // No shipment field is required any more — the dashboard can save a
+  // partial consignment. Only check the email FORMAT when one was typed.
+  if (data.recipient_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.recipient_email)) {
+    throw new Error('recipient_email must be a valid email address')
   }
   if (data.estimated_delivery !== undefined) {
     if (data.estimated_delivery === null || data.estimated_delivery === '') {
@@ -130,7 +137,8 @@ router.post('/shipments', async (req, res) => {
       surcharge_fuel: fin.fuel,
       surcharge_customs: fin.customs,
       total_cost: fin.total,
-      payment_status: data.payment_status || 'Unpaid',
+      payment_status: data.payment_status || 'Paid',
+      currency: data.currency || 'USD',
       current_status: 'Created',
       progress_percentage: STATUS_PROGRESS.Created,
       checkpoints: [

@@ -30,7 +30,7 @@ export function symbolFor(code) {
 }
 
 // format(12500, 'NGN') → '₦12,500.00' (JPY/KRW use 0 decimals)
-export function formatMoney(amount, code = 'NGN') {
+export function formatMoney(amount, code = 'USD') {
   const c = byCode.get(String(code || '').toUpperCase())
   const zeroDecimals = c?.code === 'JPY' || c?.code === 'KRW'
   const num = Number(amount || 0)

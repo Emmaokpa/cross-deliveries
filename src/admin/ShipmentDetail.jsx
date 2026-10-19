@@ -407,7 +407,7 @@ export default function ShipmentDetail() {
       cargo_type: s.cargo_type || 'Air', package_weight: s.package_weight ?? '',
       package_quantity: s.package_quantity ?? 1, package_description: s.package_description || '',
       base_freight: s.base_freight ?? '', surcharge_fuel: s.surcharge_fuel ?? '', surcharge_customs: s.surcharge_customs ?? '',
-      payment_status: s.payment_status || 'Unpaid', currency: s.currency || 'NGN',
+      payment_status: s.payment_status || 'Paid', currency: s.currency || 'USD',
     })
     setEditOpen(true)
   }
@@ -418,9 +418,13 @@ export default function ShipmentDetail() {
     try {
       const body = { ...editForm }
       // Blank numerics fall back to existing stored values (backend merges)
-      for (const k of ['package_weight', 'package_quantity', 'base_freight', 'surcharge_fuel', 'surcharge_customs']) {
+      for (const k of ['package_weight', 'package_quantity', 'base_freight']) {
         if (body[k] === '') delete body[k]
       }
+      // Fuel & customs fee fields are commented out of this form — the price
+      // typed above IS the total, so clear any legacy surcharges on record.
+      body.surcharge_fuel = 0
+      body.surcharge_customs = 0
       const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body })
       setShipment(data.shipment)
       setEditOpen(false)
@@ -446,7 +450,7 @@ export default function ShipmentDetail() {
   }
 
   const openCurEdit = () => {
-    setCurValue(s.currency || 'NGN')
+    setCurValue(s.currency || 'USD')
     setCurEdit(true)
   }
 
@@ -524,7 +528,7 @@ export default function ShipmentDetail() {
               ) : (
                 <>
                   <span style={{ fontSize: 13.5, color: '#374151' }}>
-                    Currency: <strong>{s.currency || 'NGN'}</strong>
+                    Currency: <strong>{s.currency || 'USD'}</strong>
                   </span>
                   <button className="btn-a btn-ghost-a btn-sm-a" onClick={openCurEdit}>Edit</button>
                 </>
@@ -557,11 +561,13 @@ export default function ShipmentDetail() {
               <div className="kv"><span className="k">Sender</span><span className="v">{COMPANY.legal_name} • {COMPANY.email}</span></div>
               <div className="kv"><span className="k">Recipient</span><span className="v">{s.recipient_name} • {s.recipient_email}</span></div>
               <div className="kv"><span className="k">Delivery address</span><span className="v">{s.recipient_address || '—'}, {s.recipient_city} {s.recipient_country}</span></div>
-              <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • {s.package_weight} kg • ×{s.package_quantity}</span></div>
-              <div className="kv"><span className="k">Description</span><span className="v">{s.package_description || '—'}</span></div>
-              <div className="kv"><span className="k">Base freight</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
+              <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • ×{s.package_quantity}</span></div>
+              <div className="kv"><span className="k">Package contents</span><span className="v">{s.package_description || '—'}</span></div>
+              {/* The price IS the total — fuel surcharge & customs fee rows commented out
               <div className="kv"><span className="k">Fuel surcharge</span><span className="v">{fmtMoney(s.surcharge_fuel, s.currency)}</span></div>
               <div className="kv"><span className="k">Customs & handling</span><span className="v">{fmtMoney(s.surcharge_customs, s.currency)}</span></div>
+              */}
+              <div className="kv"><span className="k">Price</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
               <div className="kv"><span className="k">Total</span><span className="v" style={{ fontWeight: 700 }}>{fmtMoney(s.total_cost, s.currency)}</span></div>
               <div className="kv"><span className="k">Payment</span><span className="v"><Badge value={s.payment_status} /></span></div>
               <div className="kv"><span className="k">Last email sent</span><span className="v">{s.email_sent_at ? fmtDate(s.email_sent_at) : 'Never'}</span></div>
@@ -727,28 +733,31 @@ export default function ShipmentDetail() {
           <form onSubmit={saveEdit}>
             <SenderInfo />
 
-            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver details (editable)</h4>
+            {/* Every field below is OPTIONAL — nothing is required. */}
+            <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Receiver's details</h4>
             <div className="form-grid">
-              <Field label="Name" required><input value={editForm.recipient_name} onChange={setE('recipient_name')} required /></Field>
-              <Field label="Email" required><input type="email" value={editForm.recipient_email} onChange={setE('recipient_email')} required /></Field>
-              <Field label="Phone"><input value={editForm.recipient_phone} onChange={setE('recipient_phone')} /></Field>
-              <Field label="Delivery address"><input value={editForm.recipient_address} onChange={setE('recipient_address')} /></Field>
+              <Field label="Receiver's name"><input value={editForm.recipient_name} onChange={setE('recipient_name')} /></Field>
+              <Field label="Receiver's email"><input type="email" value={editForm.recipient_email} onChange={setE('recipient_email')} /></Field>
+              <Field label="Phone number"><input value={editForm.recipient_phone} onChange={setE('recipient_phone')} /></Field>
+              <Field label="Address"><input value={editForm.recipient_address} onChange={setE('recipient_address')} /></Field>
               <Field label="City"><input value={editForm.recipient_city} onChange={setE('recipient_city')} /></Field>
               <Field label="Country"><input value={editForm.recipient_country} onChange={setE('recipient_country')} /></Field>
             </div>
 
             <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Package & Route</h4>
             <div className="form-grid">
-              <Field label="Origin city"><input value={editForm.origin_city} onChange={setE('origin_city')} /></Field>
-              <Field label="Destination city"><input value={editForm.destination_city} onChange={setE('destination_city')} /></Field>
-              <Field label="Cargo type">
+              <Field label="From (city)"><input value={editForm.origin_city} onChange={setE('origin_city')} /></Field>
+              <Field label="To (city)"><input value={editForm.destination_city} onChange={setE('destination_city')} /></Field>
+              <Field label="Shipping method">
                 <select value={editForm.cargo_type} onChange={setE('cargo_type')}>
                   <option>Air</option><option>Ocean</option><option>Road</option>
                 </select>
               </Field>
+              {/* TEMP DISABLED — cargo weight field (restore by deleting the comment markers)
               <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={editForm.package_weight} onChange={setE('package_weight')} /></Field>
-              <Field label="Quantity"><input type="number" min="1" value={editForm.package_quantity} onChange={setE('package_quantity')} /></Field>
-              <Field label="Description"><input value={editForm.package_description} onChange={setE('package_description')} /></Field>
+              */}
+              <Field label="Number of packages"><input type="number" min="1" value={editForm.package_quantity} onChange={setE('package_quantity')} /></Field>
+              <Field label="Package contents"><input value={editForm.package_description} onChange={setE('package_description')} /></Field>
             </div>
 
             <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials</h4>
@@ -760,12 +769,15 @@ export default function ShipmentDetail() {
                   ))}
                 </select>
               </Field>
-              <Field label="Base freight"><input type="number" step="0.01" min="0" value={editForm.base_freight} onChange={setE('base_freight')} /></Field>
+              {/* The price you type here IS the total the customer sees */}
+              <Field label="Price"><input type="number" step="0.01" min="0" value={editForm.base_freight} onChange={setE('base_freight')} /></Field>
+              {/* TEMP DISABLED — extra fees commented out; price is all-in
               <Field label="Fuel surcharge"><input type="number" step="0.01" min="0" value={editForm.surcharge_fuel} onChange={setE('surcharge_fuel')} /></Field>
               <Field label="Customs & handling"><input type="number" step="0.01" min="0" value={editForm.surcharge_customs} onChange={setE('surcharge_customs')} /></Field>
+              */}
               <Field label="Payment status">
                 <select value={editForm.payment_status} onChange={setE('payment_status')}>
-                  <option>Unpaid</option><option>Paid</option><option>Pending</option>
+                  <option>Paid</option><option>Unpaid</option><option>Pending</option>
                 </select>
               </Field>
             </div>

@@ -78,8 +78,10 @@ export const SCHEMAS = {
       { name: 'sender_email', type: 'text', required: true },
       { name: 'sender_phone', type: 'text' },
       { name: 'sender_address', type: 'text' },
-      { name: 'recipient_name', type: 'text', required: true },
-      { name: 'recipient_email', type: 'text', required: true },
+      // recipient_name / recipient_email are NOT required — the dashboard
+      // allows creating a shipment before the receiver details are known.
+      { name: 'recipient_name', type: 'text' },
+      { name: 'recipient_email', type: 'text' },
       { name: 'recipient_phone', type: 'text' },
       { name: 'recipient_address', type: 'text' },
       { name: 'recipient_city', type: 'text' },

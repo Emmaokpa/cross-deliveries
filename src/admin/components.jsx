@@ -115,7 +115,7 @@ export function EmptyState({ icon = '📦', title, hint }) {
   )
 }
 
-export function fmtMoney(n, currency = 'NGN') {
+export function fmtMoney(n, currency = 'USD') {
   return formatMoney(n, currency)
 }
 
