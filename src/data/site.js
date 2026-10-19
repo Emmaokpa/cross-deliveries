@@ -10,7 +10,7 @@ export const siteInfo = {
   name: 'CrossBordersDeliveries.com',
   tagline: 'leading logistics and distribution services',
   address: 'No. 19/3 PK. 34810 Beykoz / Instabul Turkiye',
-  email: 'crossborder.delivery@outlook.com',
+  email: 'crossborder.delivery@crossbordersdeliveries.site',
   phones: '+908060552123, +902166809250',
 }
 

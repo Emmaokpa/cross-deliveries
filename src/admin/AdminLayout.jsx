@@ -77,6 +77,7 @@ export default function AdminLayout() {
             <NavLink to="/admin" end>📊 Dashboard</NavLink>
             <NavLink to="/admin/shipments">📦 Shipments</NavLink>
             <NavLink to="/admin/mail">✉️ Mail</NavLink>
+            <NavLink to="/admin/inbox">📥 Inbox</NavLink>
             {admin.role === 'super_admin' && <NavLink to="/admin/users">👥 Staff Accounts</NavLink>}
             {admin.role === 'super_admin' && <NavLink to="/admin/audit">🧾 Audit Log</NavLink>}
           </nav>

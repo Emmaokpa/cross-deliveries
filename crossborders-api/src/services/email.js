@@ -63,6 +63,21 @@ function logoAttachment() {
     : []
 }
 
+/**
+ * Swap the CID logo reference for a base64 data URI. Needed by send paths
+ * that can't attach CID images (Brevo HTTP API) and by the browser preview
+ * (a browser cannot resolve cid: URLs — the logo would show as a broken
+ * image). Returns the input unchanged when the logo file is missing or the
+ * html carries no CID reference.
+ */
+export function inlineLogoDataUri(html) {
+  if (!fs.existsSync(LOGO_PATH) || !html.includes(`cid:${LOGO_CID}`)) return html
+  return html.replaceAll(
+    `src="cid:${LOGO_CID}"`,
+    `src="data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}"`,
+  )
+}
+
 // Brand banner: soft pink-tinted gradient strip with the logo mark on the
 // left and the bold "Cross Borders Deliveries" lockup on the right. The
 // pink is deliberately gentle — white easing into a barely-there coral
@@ -176,6 +191,41 @@ function brandFooter(note) {
                 ${escapeHtml(COMPANY.address)} &bull; Fax: ${escapeHtml(COMPANY.fax)}<br />
                 Reg. No. ${escapeHtml(COMPANY.reg_no)} &bull; ${escapeHtml(COMPANY.email)} &bull; ${escapeHtml(COMPANY.website)}<br />
                 <span style="font-size:10.5px;">${note}</span>
+              </div>
+            </td>
+          </tr>`
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SUBJECT LINES — single source of truth. The send helpers and the
+// "reply to this email" CTA baked into each template must produce the
+// exact same subject so customer replies thread correctly.
+// ─────────────────────────────────────────────────────────────────
+export function statusSubject(shipment) {
+  return `[${shipment.tracking_number}] Shipment ${shipment.current_status} — ${COMPANY.brand_name}`
+}
+
+export function confirmationSubject(shipment) {
+  return `Official Notification of Incoming Shipment — ${shipment.tracking_number}`
+}
+
+// ─────────────────────────────────────────────────────────────────
+// REPLY CTA — a big, bold coral button ("Click Here to Reply to This
+// Email") that opens a pre-addressed reply to the company mailbox,
+// with the address spelled out underneath. Rendered by EVERY outgoing
+// template (status/invoice, confirmation letter and the admin's custom
+// compose) so customers always have a one-click way to answer back.
+// ─────────────────────────────────────────────────────────────────
+function replyCtaBlock(subject) {
+  const href = `mailto:${COMPANY.email}?subject=${encodeURIComponent(`Re: ${subject || ''}`)}`
+  return `
+          <!-- ═══ Reply CTA (one-click reply) ═══ -->
+          <tr>
+            <td align="center" class="cbd-pad" style="padding:24px 34px 4px;">
+              <div style="background:${DARK_PANEL};border:1px solid ${DARK_LINE};border-radius:10px;padding:18px 20px;text-align:center;">
+                <div style="font-size:13.5px;color:${OFF_WHITE};font-weight:bold;margin-bottom:12px;">Got a question about this email? We reply 24 hours a day, 7 days a week.</div>
+                <a href="${href}" style="display:inline-block;background:${CORAL};color:${WHITE};text-decoration:none;font-weight:bold;font-size:16px;padding:15px 42px;border-radius:8px;letter-spacing:0.4px;">&#8617; Click Here to Reply to This Email</a>
+                <div style="font-size:12px;color:${DIM};margin-top:12px;">Or simply hit &ldquo;Reply&rdquo; in your mail app &mdash; it reaches <strong style="color:${BLUE};">${escapeHtml(COMPANY.email)}</strong></div>
               </div>
             </td>
           </tr>`
@@ -376,6 +426,7 @@ function renderTemplate(shipment) {
               </p>
             </td>
           </tr>
+${replyCtaBlock(statusSubject(shipment))}
 ${letterheadDetails()}
 ${brandFooter('This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.')}`
 
@@ -506,7 +557,7 @@ async function sendViaBrevoApi({ to, subject, html, attachments }) {
 // recorded in the `emails` PocketBase collection and shown in the admin
 // console under Admin → Mail. A logging failure never affects the send.
 // ─────────────────────────────────────────────────────────────────
-async function logEmail({ to, subject, label, shipment, admin, status, transport, error }) {
+async function logEmail({ to, subject, label, shipment, admin, status, transport, error, bodyText, bodyHtml }) {
   try {
     await createRecord(COLLECTIONS.emails, {
       to_email: to,
@@ -518,6 +569,10 @@ async function logEmail({ to, subject, label, shipment, admin, status, transport
       shipment_id: shipment?.id || shipment?._id || undefined,
       tracking_number: shipment?.tracking_number || undefined,
       sent_by: admin?.email || 'system',
+      // Body of admin-composed mail (services email.js → Admin → Mail):
+      // lets the admin preview exactly what went out.
+      body_text: bodyText ? String(bodyText).slice(0, 20000) : undefined,
+      body_html: bodyHtml ? String(bodyHtml).slice(0, 60000) : undefined,
     })
   } catch (e) {
     console.error('[email-log] failed to record mail log:', e.message)
@@ -529,33 +584,32 @@ async function logEmail({ to, subject, label, shipment, admin, status, transport
 // HARDCODED to the company constants — never taken from shipment data.
 // Prefers the Brevo HTTP API (HTTPS/443 — always open), falls back to
 // SMTP (ports 587 → 2525 → 465), then a logged simulation.
+//
+// `shipment` is OPTIONAL: admin-composed mail (Admin → Mail → Compose)
+// has no shipment attached — the shipment bookkeeping (email_sent_at,
+// shipment-scoped audit) is skipped for it while logging/auditing still
+// happen per recipient.
 // ─────────────────────────────────────────────────────────────────
-async function deliverMail({ to, subject, html, attachments = [], shipment, admin, label }) {
+async function deliverMail({ to, subject, html, attachments = [], shipment, admin, label, bodyText, bodyHtml }) {
   const mailFrom = process.env.MAIL_FROM || COMPANY.email
   // Display/reply address — does not need Brevo verification
   const replyTo = process.env.MAIL_REPLY_TO || COMPANY.email
-  const logoInline = fs.existsSync(LOGO_PATH) && html.includes(`cid:${LOGO_CID}`)
+  const entity = shipment ? { type: 'shipment', id: String(shipment._id) } : { type: 'email', id: null }
 
   // ── Preferred path: Brevo HTTP API (works when SMTP ports are blocked) ──
   if (process.env.BREVO_API_KEY) {
     try {
       // The API can't inline CID images — embed the logo as a base64 data URI instead
-      let htmlApi = html
-      if (logoInline) {
-        htmlApi = html.replaceAll(
-          `src="cid:${LOGO_CID}"`,
-          `src="data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}"`,
-        )
-      }
+      const htmlApi = inlineLogoDataUri(html)
       await sendViaBrevoApi({ to, subject, html: htmlApi, attachments })
-      await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
-      await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via Brevo API`)
-      await logEmail({ to, subject, label, shipment, admin, status: 'sent', transport: 'brevo-api' })
+      if (shipment) await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
+      await audit(admin, 'email.sent', entity.type, entity.id, `${label} emailed to ${to} via Brevo API`)
+      await logEmail({ to, subject, label, shipment, admin, status: 'sent', transport: 'brevo-api', bodyText, bodyHtml })
       return { sent: true, to, subject, message: 'Email sent via Brevo API (HTTPS).' }
     } catch (err) {
       console.error('[brevo-api] send failed:', err.message)
-      await audit(admin, 'email.failed', 'shipment', String(shipment._id), `Brevo API: ${String(err.message).slice(0, 200)}`)
-      await logEmail({ to, subject, label, shipment, admin, status: 'failed', transport: 'brevo-api', error: err.message })
+      await audit(admin, 'email.failed', entity.type, entity.id, `Brevo API: ${String(err.message).slice(0, 200)}`)
+      await logEmail({ to, subject, label, shipment, admin, status: 'failed', transport: 'brevo-api', error: err.message, bodyText, bodyHtml })
       return { sent: false, error: err.message, to, subject, message: `Brevo API send failed — ${err.message}` }
     }
   }
@@ -563,8 +617,8 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
   // ── Fallback: SMTP (tries ports 587 → 2525 → 465) ──
   if (!smtpConfigured()) {
     console.log(`[email:simulated] → ${to} | ${subject}`)
-    await audit(admin, 'email.simulated', 'shipment', String(shipment._id), `No BREVO_API_KEY / SMTP configured; simulated email to ${to}`)
-    await logEmail({ to, subject, label, shipment, admin, status: 'simulated', transport: 'none' })
+    await audit(admin, 'email.simulated', entity.type, entity.id, `No BREVO_API_KEY / SMTP configured; simulated email to ${to}`)
+    await logEmail({ to, subject, label, shipment, admin, status: 'simulated', transport: 'none', bodyText, bodyHtml })
     return { sent: false, simulated: true, to, subject, message: 'Email not configured — simulated in logs. Set SMTP_HOST / SMTP_USER / SMTP_PASS.' }
   }
 
@@ -577,9 +631,9 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
       html,
       attachments,
     })
-    await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
-    await audit(admin, 'email.sent', 'shipment', String(shipment._id), `${label} emailed to ${to} via SMTP port ${port}`)
-    await logEmail({ to, subject, label, shipment, admin, status: 'sent', transport: `smtp:${port}` })
+    if (shipment) await updateRecord(COLLECTIONS.shipments, shipment.id || shipment._id, { email_sent_at: new Date() })
+    await audit(admin, 'email.sent', entity.type, entity.id, `${label} emailed to ${to} via SMTP port ${port}`)
+    await logEmail({ to, subject, label, shipment, admin, status: 'sent', transport: `smtp:${port}`, bodyText, bodyHtml })
     return { sent: true, to, subject, message: `Email sent via SMTP (port ${port}).` }
   } catch (err) {
     const { SMTP_HOST } = process.env
@@ -590,8 +644,8 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
           ? ' — authentication rejected by the SMTP server. Check the SMTP user/key.'
           : ''
     console.error(`[smtp] send failed (${err.code || 'error'}): ${err.message}${hint}`)
-    await audit(admin, 'email.failed', 'shipment', String(shipment._id), `${err.code || 'error'}: ${String(err.message).slice(0, 200)}`)
-    await logEmail({ to, subject, label, shipment, admin, status: 'failed', transport: 'smtp', error: err.message })
+    await audit(admin, 'email.failed', entity.type, entity.id, `${err.code || 'error'}: ${String(err.message).slice(0, 200)}`)
+    await logEmail({ to, subject, label, shipment, admin, status: 'failed', transport: 'smtp', error: err.message, bodyText, bodyHtml })
     return { sent: false, error: err.message, to, subject, message: `SMTP send failed (${err.code || 'error'})${hint}` }
   }
 }
@@ -599,7 +653,7 @@ async function deliverMail({ to, subject, html, attachments = [], shipment, admi
 // Status/progress email — invoice PDF attached, logo inline.
 export async function sendShipmentEmail(shipment, admin) {
   const to = shipment.recipient_email
-  const subject = `[${shipment.tracking_number}] Shipment ${shipment.current_status} — ${COMPANY.brand_name}`
+  const subject = statusSubject(shipment)
   const html = fillTemplate(shipment)
 
   // Build the invoice attachment once (used by both send paths)
@@ -698,6 +752,7 @@ export function renderConfirmationLetter(shipment) {
                 <strong style="color:${WHITE};">${escapeHtml(COMPANY.legal_name)}</strong></p>
             </td>
           </tr>
+${replyCtaBlock(confirmationSubject(shipment))}
 ${brandFooter('This is an automated letter from Cross Borders Deliveries. If you were not expecting this consignment, please contact us immediately.')}`
 
   return darkShell(inner)
@@ -708,7 +763,73 @@ ${brandFooter('This is an automated letter from Cross Borders Deliveries. If you
 // else (letterhead, signature, date) is fixed server-side.
 export async function sendConfirmationEmail(shipment, admin) {
   const to = shipment.recipient_email
-  const subject = `Official Notification of Incoming Shipment — ${shipment.tracking_number}`
+  const subject = confirmationSubject(shipment)
   const html = renderConfirmationLetter(shipment)
   return deliverMail({ to, subject, html, attachments: logoAttachment(), shipment, admin, label: 'Confirmation letter' })
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CUSTOM (COMPOSED) EMAIL — Admin → Mail → Compose.
+//
+// The admin types ANY recipient address(es) (they do not have to be
+// registered users), a subject and the body. The message is wrapped in
+// the exact same unified dark template as the confirmation letter and
+// status email — brand banner, letterhead, reply CTA and footer — so it
+// is visually identical to every other mail customers receive from us.
+// ─────────────────────────────────────────────────────────────────
+export function renderCustomMail({ subject, body }) {
+  // Blank lines split paragraphs; single newlines become <br />; all HTML
+  // typed by the admin is escaped, so the template can never be broken out of.
+  const paragraphs = String(body || '')
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="margin:0 0 16px;">${escapeHtml(p).replace(/\n/g, '<br />')}</p>`)
+    .join('\n              ')
+
+  const inner = `
+          <!-- ═══ Kicker + subject ═══ -->
+          <tr>
+            <td class="cbd-pad" style="padding:26px 34px 4px;">
+              <div style="font-size:11px;color:${CORAL};letter-spacing:1.6px;font-weight:bold;text-transform:uppercase;margin-bottom:7px;">A message from ${escapeHtml(COMPANY.legal_name)}</div>
+              <h1 style="margin:0;font-size:20px;color:${WHITE};">${escapeHtml(subject)}</h1>
+            </td>
+          </tr>
+
+          <!-- ═══ Body ═══ -->
+          <tr>
+            <td class="cbd-pad cbd-body" style="padding:16px 34px 6px;font-size:14.5px;color:${OFF_WHITE};line-height:1.85;">
+              ${paragraphs || '<p style="margin:0;">&nbsp;</p>'}
+            </td>
+          </tr>
+${replyCtaBlock(subject)}
+${letterheadDetails()}
+${brandFooter('This message was sent to you by Cross Borders Deliveries. If you were not expecting it, please contact us directly.')}`
+
+  return darkShell(inner)
+}
+
+/**
+ * Send one composed email to every recipient — one delivery attempt and one
+ * mail-log record per address, so the Sent list shows each outcome separately.
+ * Returns [{ to, sent, simulated?, error?, message }].
+ */
+export async function sendCustomMail({ recipients, subject, body, admin }) {
+  const html = renderCustomMail({ subject, body })
+  const results = []
+  for (const to of recipients) {
+    const result = await deliverMail({
+      to,
+      subject,
+      html,
+      attachments: logoAttachment(),
+      shipment: null,
+      admin,
+      label: 'Custom email',
+      bodyText: String(body),
+      bodyHtml: html,
+    })
+    results.push({ to, ...result })
+  }
+  return results
 }

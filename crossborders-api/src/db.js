@@ -140,7 +140,7 @@ export const SCHEMAS = {
     fields: [
       { name: 'to_email', type: 'text', required: true },
       { name: 'subject', type: 'text', required: true },
-      { name: 'kind', type: 'text' }, // 'Invoice/status email' | 'Confirmation letter'
+      { name: 'kind', type: 'text' }, // 'Invoice/status email' | 'Confirmation letter' | 'Custom email'
       { name: 'status', type: 'text' }, // 'sent' | 'failed' | 'simulated'
       { name: 'transport', type: 'text' }, // 'smtp:465' | 'brevo-api' | 'none'
       { name: 'error', type: 'text' },
@@ -149,7 +149,11 @@ export const SCHEMAS = {
       { name: 'sent_by', type: 'text' }, // admin email (or 'system')
       // inbound replies (services/mail-sync.js):
       { name: 'from_email', type: 'text' }, // sender of a received reply
-      { name: 'body_text', type: 'text' }, // plain-text body of a received reply
+      // NOTE: PocketBase caps `text` at 5000 chars by default — set explicit
+      // limits above the code's own slice caps (20000 / 60000) or long replies
+      // and composed mail fail to record with validation_max_text_constraint.
+      { name: 'body_text', type: 'text', max: 25000 }, // plain-text body (reply or composed mail)
+      { name: 'body_html', type: 'text', max: 100000 }, // HTML body (reply or composed mail)
       { name: 'message_id', type: 'text' }, // MIME Message-ID — dedupe key
       ...TIMESTAMPS,
     ],
@@ -370,13 +374,37 @@ export async function ensureCollections() {
     // Existing collection — add any fields that SCHEMAS has but the server doesn't.
     const have = new Set((current.fields || []).map((f) => f.name))
     const missing = schema.fields.filter((f) => !have.has(f.name))
-    if (!missing.length) continue
+
+    // Also RAISE text-field length limits where the code allows more than the
+    // server currently enforces (e.g. body_text / body_html vs PocketBase's
+    // 5000-char default — without this, long replies and composed mail fail to
+    // record on collections that existed before the limit was set). Only ever
+    // increases `max`; nothing else on an existing field is touched.
+    const serverFields = new Map((current.fields || []).map((f) => [f.name, f]))
+    const bumped = []
+    for (const f of schema.fields) {
+      if (f.type !== 'text' || typeof f.max !== 'number') continue
+      const server = serverFields.get(f.name)
+      if (!server) continue
+      const serverMax = Number.isFinite(Number(server.max)) ? Number(server.max) : 5000
+      if (serverMax >= f.max) continue
+      server.max = f.max
+      bumped.push(f.name)
+    }
+
+    if (!missing.length && !bumped.length) continue
     try {
-      await pb.collections.update(current.id, { fields: [...(current.fields || []), ...missing] })
-      console.log(`[db] Added missing fields to "${schema.name}": ${missing.map((f) => f.name).join(', ')}`)
+      const merged = [...(current.fields || []), ...missing]
+      await pb.collections.update(current.id, { fields: merged })
+      if (missing.length) {
+        console.log(`[db] Added missing fields to "${schema.name}": ${missing.map((f) => f.name).join(', ')}`)
+      }
+      if (bumped.length) {
+        console.log(`[db] Raised text length limits on "${schema.name}": ${bumped.join(', ')}`)
+      }
     } catch (err) {
       // Non-fatal: the affected columns stay empty until the next boot retries.
-      console.warn(`[db] Could not add fields to "${schema.name}" (${err.message}) — will retry on next boot`)
+      console.warn(`[db] Could not update fields of "${schema.name}" (${err.message}) — will retry on next boot`)
     }
   }
 }

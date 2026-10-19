@@ -38,7 +38,29 @@ export async function processInboundMessage(source) {
   const messageId = parsed.messageId || null
   const from = parsed.from?.value?.[0]?.address || String(parsed.from?.text || 'unknown')
   const subject = parsed.subject || '(no subject)'
-  const text = String(parsed.text || '').slice(0, 20000)
+  // Prefer the plain-text alternative; fall back to a tag-stripped version of
+  // the HTML part so HTML-only replies (very common) still show readable text
+  // in the admin inbox.
+  const html = parsed.html === false ? null : parsed.html || null
+  let text = String(parsed.text || '').trim()
+  if (!text && html) {
+    text = html
+      .replace(/<style[\s\S]*?<\/style\s*>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script\s*>/gi, ' ')
+      .replace(/<br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/(p|div|tr|li|h[1-6])\s*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+  text = text.slice(0, 20000)
 
   if (messageId) {
     const existing = await findOne(COLLECTIONS.emails, `message_id = '${escapeFilter(messageId)}'`)
@@ -63,6 +85,7 @@ export async function processInboundMessage(source) {
     tracking_number: tracking,
     sent_by: from,
     body_text: text,
+    body_html: html ? String(html).slice(0, 60000) : undefined,
     message_id: messageId,
   })
   return { created: true }

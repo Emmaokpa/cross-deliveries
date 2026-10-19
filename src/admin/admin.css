@@ -628,10 +628,192 @@ table.data-table {
 
 .required-star-a { color: var(--a-red); font-weight: 700; margin-left: 2px; }
 
+/* ---------- Mail centre (Compose / Inbox / Sent) ---------- */
+.mail-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.mail-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  border: 1px solid var(--a-border);
+  background: #fff;
+  color: var(--a-navy);
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 14.5px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mail-tab:hover { border-color: var(--a-navy); }
+
+.mail-tab.active {
+  background: var(--a-navy);
+  border-color: var(--a-navy);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(3, 20, 53, 0.22);
+}
+
+.mail-tab .pill {
+  background: #eef1f7;
+  color: var(--a-navy);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mail-tab.active .pill { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+.mail-card-title {
+  margin: 0 0 14px;
+  color: var(--a-navy);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.mail-compose {
+  display: grid;
+  grid-template-columns: minmax(340px, 1fr) minmax(380px, 1.25fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.mail-compose .field label { font-size: 13.5px; }
+.mail-compose .field input,
+.mail-compose .field textarea { font-size: 15.5px; line-height: 1.65; }
+.mail-compose .field textarea { resize: vertical; }
+
+.field-hint {
+  font-size: 13px;
+  color: var(--a-muted);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+.mail-preview-frame {
+  width: 100%;
+  height: 640px;
+  border: 0;
+  border-radius: 12px;
+  background: #0f1117;
+  display: block;
+}
+
+.mail-preview-empty {
+  height: 640px;
+  border: 2px dashed var(--a-border);
+  border-radius: 12px;
+  background: #fafbfd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: var(--a-muted);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+/* Bigger, bolder mail tables than the rest of the console. */
+table.data-table.mail-table { font-size: 14.5px; }
+.mail-table td { padding: 15px 14px; }
+.mail-table .subject {
+  font-weight: 700;
+  color: var(--a-navy);
+  font-size: 15.5px;
+  min-width: 220px;
+}
+.mail-table .addr { font-weight: 600; color: #374151; }
+.mail-table .when { color: var(--a-muted); font-size: 13px; white-space: nowrap; }
+
+/* Reading pane — deliberately large and bold. */
+.mail-meta .row {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed #eef1f6;
+  font-size: 16px;
+  align-items: baseline;
+}
+
+.mail-meta .k {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--a-navy);
+  min-width: 96px;
+  flex-shrink: 0;
+}
+
+.mail-meta .v { color: var(--a-text); font-weight: 600; overflow-wrap: anywhere; }
+
+.mail-view-toggle { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+
+.mail-view-btn {
+  border: 1px solid var(--a-border);
+  background: #fff;
+  color: var(--a-navy);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mail-view-btn.active { background: var(--a-navy); border-color: var(--a-navy); color: #fff; }
+
+.mail-read-body {
+  font-size: 17.5px;
+  line-height: 1.85;
+  color: #111827;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f8fafc;
+  border: 1px solid var(--a-border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  margin-top: 18px;
+  font-weight: 500;
+}
+
+.mail-html {
+  font-size: 17px;
+  line-height: 1.75;
+  color: #111827;
+  background: #f8fafc;
+  border: 1px solid var(--a-border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  margin-top: 18px;
+  overflow-wrap: anywhere;
+}
+
+.mail-html p { margin: 0 0 14px; }
+.mail-html a { color: #1d4ed8; word-break: break-word; }
+.mail-html img { max-width: 100%; height: auto; }
+.mail-html table { max-width: 100%; border-collapse: collapse; }
+.mail-html td, .mail-html th { padding: 6px 8px; }
+
+.mail-read-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+.mail-read-actions .btn-a { font-size: 15px; padding: 13px 24px; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1024px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .mail-compose { grid-template-columns: 1fr; }
+  .mail-preview-frame, .mail-preview-empty { height: 480px; }
 }
 
 /* The shipment detail page sets gridTemplateColumns inline, which beats media

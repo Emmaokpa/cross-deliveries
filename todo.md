@@ -1,118 +1,162 @@
-# TODO — Get the CrossBorders deployment working (handoff instructions)
+# TODO — CrossBorders: import the schema, then finish deployment
 
 > **Who this is for:** Gemini (an AI assistant) working with a beginner user.
-> **Goal:** Guide the user step-by-step until the backend is deployed and
-> healthy on Coolify, and the site actually works end to end.
+> **Hand this file to Gemini** (or tell Gemini to read `todo.md`) — it is the
+> full current task list.
 > **Do NOT touch the frontend** — the website stays on Vercel.
 
 ---
 
 ## Context (read first)
 
-- The backend lives in `crossborders-api/` (Express API + PocketBase database).
-- Everything is already pushed to GitHub: https://github.com/Emmaokpa/cross-deliveries
-  (branch `main`, latest commit `dcef281`).
-- **The startup crash is FIXED.** Previously the API demanded a PocketBase
-  superuser login before starting; if credentials were missing or wrong, the
-  process exited, `/api/health` failed, and Coolify rolled back every deploy.
-  The fix (commit `dcef281`) changed the behavior to:
-  - The server **always starts and listens first**, even with no admin
-    credentials and even if PocketBase is down.
-  - `/api/health` **always returns HTTP 200**. It now includes a `db` block:
-    `{"configured","superuserConfigured","ready","authenticated","error"}` —
-    use `db.error` to see what is wrong; it never fails the healthcheck.
-  - Superuser login is **lazy**: it happens on first data access and retries
-    every 30s in the background. Warnings in the logs are non-fatal.
-- Their Coolify deployment is **Dockerfile-based** (healthcheck comes from
-  `crossborders-api/Dockerfile`), and **PocketBase runs as a separate service**
-  in Coolify — not inside the API container.
+**Architecture (plain English):**
+- Frontend = Vercel (`www.<domain>`)
+- Backend API = Coolify on the VPS (`api.<domain>`), repo:
+  https://github.com/Emmaokpa/cross-deliveries, folder `crossborders-api/`
+- Database = PocketBase, currently reachable at
+  `https://pocketbase.crossbordersdeliveries.site` (superuser account exists
+  and the user is logged in to its admin dashboard)
+
+**What already works / was done in previous sessions:**
+- The API startup crash is FIXED (commit `dcef281`): the server always boots,
+  `/api/health` always returns 200 and includes a `db` block:
+  `{"configured","superuserConfigured","ready","authenticated","error"}`.
+- API contract: all three collections (`admins`, `shipments`, `audit_logs`)
+  with API rules `null` = superuser-only; the Express API is the only writer.
+- Tracking updates (`checkpoints`) and customer details (`sender_*` /
+  `recipient_*`) intentionally live **inside** each `shipments` record —
+  there are deliberately NO separate `customers` / `tracking_updates` tables.
+  Do not propose normalizing them; the app reads them embedded.
 - The **mock admin** (`admin@gmail.com` / `password123`) is intentionally left
   in place — do NOT remove it yet.
-- Email (Brevo/SMTP) is intentionally NOT configured yet — later session. Leave
-  `SMTP_*`, `BREVO_API_KEY`, `MAIL_FROM` blank.
+- Email (Brevo/SMTP) is intentionally NOT configured yet — later session.
 
-**Plain-English architecture:** Frontend = Vercel (`www.<domain>`).
-Backend API = Coolify (`api.<domain>`). Database (PocketBase) = separate
-service on the VPS, private, only reachable by the API. Never expose
-PocketBase to the internet.
+**What was done in the last session (schema work — the files are LOCAL, not
+yet on GitHub):**
+
+| File | What it is |
+|---|---|
+| `crossborders-api/schema/collections.blueprint.json` | **The schema blueprint** — JSON of all 3 collections in PocketBase's native import format |
+| `crossborders-api/scripts/schema.mjs` | toolbox: `schema:export` / `schema:push` / `schema:verify` |
+| `crossborders-api/package.json` | added the 3 `schema:*` npm scripts |
+| `crossborders-api/src/db.js` | `SCHEMAS` is now exported (single source of truth; no behavior change) |
+| `crossborders-api/README.md` | new "Database schema" section |
+
+Everything was tested against a real PocketBase instance (create, re-run
+idempotency, drift detect + repair, full API flow). It has **not** yet been
+run against the live server.
 
 ---
 
-## STEPS
+## STEP 1 — Import the schema into PocketBase  ← Gemini: start here
 
-### STEP 1 — Redeploy the API in Coolify
-The fix is on GitHub; the old crashing code is still what's deployed.
+The user must **open the file** `crossborders-api/schema/collections.blueprint.json`
+and then do ONE of the two paths below.
 
-- [ ] In the Coolify dashboard, open the API resource → **Redeploy** (pull the
-      latest `main`). If the resource isn't connected to the repo yet, create
-      it from https://github.com/Emmaokpa/cross-deliveries with build pack
-      **Dockerfile** and root directory `crossborders-api/`.
-- [ ] Watch the logs. A healthy boot looks like:
-      `[server] CrossBorders API running on http://localhost:8787`
-      followed by either `[db] PocketBase connected: ...` or a **warning**
-      (warnings are OK — the deploy no longer fails on them).
+### Path A — paste into the PocketBase admin dashboard (no terminal needed)
 
-### STEP 2 — Set the environment variables on the API resource
-Generate a fresh secret: `openssl rand -hex 32`.
+- [ ] User opens `crossborders-api/schema/collections.blueprint.json`, selects
+      ALL of its contents, copies it.
+- [ ] In the PocketBase dashboard → **Settings → Import collections** → paste
+      → Save.
+- [ ] If the import dialog offers a **"delete missing collections/fields"**
+      option, it must be **OFF** (we only add/update, never delete).
+- [ ] Verified behaviour: this works even though the 3 collections already
+      exist — PocketBase matches them by name and updates them in place.
+      No records are deleted.
 
-| Variable | Value / notes |
-|---|---|
-| `JWT_SECRET` | The fresh 64-char hex output above |
-| `POCKETBASE_URL` | Internal URL of the PocketBase **service** in Coolify, e.g. `http://pocketbase:8090` (same Docker network; NEVER a public URL) |
-| `POCKETBASE_ADMIN_EMAIL` | Superuser email — must match the superuser that actually exists in PocketBase |
-| `POCKETBASE_ADMIN_PASSWORD` | Superuser password — same rule |
-| `CORS_ORIGINS` | `https://www.<domain>,https://<domain>` |
-| `APP_DOMAIN` | `https://www.<domain>` |
-| `BREVO_API_KEY`, `SMTP_*`, `MAIL_FROM` | (blank — later session) |
+### Path B — from the terminal with the schema scripts
 
-- [ ] **Create/confirm the superuser in PocketBase** (this is the #1 cause of
-      the old "Failed to authenticate" error — credentials MUST match):
+- [ ] `cd crossborders-api` and make sure `.env` has:
+      `POCKETBASE_URL=https://pocketbase.crossbordersdeliveries.site`,
+      `POCKETBASE_ADMIN_EMAIL`, `POCKETBASE_ADMIN_PASSWORD` (must match the
+      live superuser). Then:
       ```bash
-      docker exec -it <pocketbase-container> ./pocketbase superuser upsert admin@<domain> YOUR_PASSWORD
+      npm run schema:push      # create/update collections — idempotent, safe to re-run
+      npm run schema:verify    # must print "server schema matches the code" and exit 0
       ```
-      then put the exact same email/password in the API's env vars.
-- [ ] Confirm the PocketBase service is running and `POCKETBASE_URL` uses its
-      **service name** (Coolify gives services on the same project a shared
-      network; `http://<service-name>:8090`).
+- [ ] Note: the `schema:*` scripts and blueprint file are **only local right
+      now** — commit + push them first (STEP 2) if you run this on the server.
 
-### STEP 3 — Domain + HTTPS (if not done yet)
-- [ ] At the registrar: **A record**, host `api` → VPS IP (main domain stays
-      on Vercel). Verify: `dig api.<domain> +short` → VPS IP.
-- [ ] In Coolify, attach `https://api.<domain>` to the API service so
-      Let's Encrypt issues a certificate. Redeploy if you just added it.
+---
 
-### STEP 4 — Verify it works
-- [ ] `https://api.<domain>/api/health` → HTTP 200 with
-      `"ok":true` and a `db` block. Check the `db` block:
-      - `"ready":true,"authenticated":true` → fully working.
-      - `"ready":false` → read `db.error`; it tells you exactly what to fix
-        (missing URL, missing creds, auth failure). The endpoint still 200s.
-- [ ] Log in with the mock admin: `admin@gmail.com` / `password123`.
-- [ ] In the logs, confirm collections (`admins`, `shipments`, `audit_logs`)
-      were auto-created on first successful boot.
-- [ ] Confirm PocketBase is NOT publicly exposed (port 8090 closed to the
-      internet).
+## STEP 2 — Get the schema work onto GitHub
 
-### STEP 5 — Wrap up + what's next
-- [ ] Tell the user what's done and what's next.
-- [ ] PocketBase data lives in its Docker volume — that IS the backup target.
-- [ ] NEXT session: email (Brevo + custom domain mailbox). Leave it for then.
+- [ ] Commit and push these paths from the repo root:
+      - `crossborders-api/schema/` (new)
+      - `crossborders-api/scripts/schema.mjs` (new)
+      - `crossborders-api/package.json`, `crossborders-api/src/db.js`,
+        `crossborders-api/README.md` (modified)
+- [ ] If the API/Coolify is connected to the repo, redeploy so the server
+      matches the local code.
+
+---
+
+## STEP 3 — Verify the schema import
+
+- [ ] `npm run schema:verify` → `server schema matches the code` (exit 0).
+- [ ] PocketBase dashboard → Collections shows exactly our three
+      (`admins`, `shipments`, `audit_logs`) with their records intact —
+      plus PocketBase's own system collections (`_superusers`, `users`, …).
+      Those are normal, leave them alone.
+- [ ] `https://api.<domain>/api/health` → `"ok":true` and
+      `"db":{"ready":true,"authenticated":true}`.
+- [ ] Log in with the mock admin (`admin@gmail.com` / `password123`) and open
+      a shipment — its checkpoints timeline should render.
+
+---
+
+## STEP 4 — Lock down the public PocketBase (recommended, security)
+
+PocketBase is on a **public** URL, which means its login dashboard is open
+to the internet. Records are safe (API rules are superuser-only), but:
+
+- [ ] Block the dashboard at the reverse proxy: deny `/_/` (and ideally
+      anything except `/api/`) from the public internet, OR restrict the
+      whole host by IP / basic auth.
+- [ ] In the API's Coolify env, `POCKETBASE_URL` should use the **internal**
+      URL of the PocketBase service (e.g. `http://pocketbase:8090`), not the
+      public one — the API never needs to leave the VPS network.
+
+---
+
+## STEP 5 — Outstanding deployment checklist (from earlier — skip what's done)
+
+- [ ] API env vars on the Coolify resource:
+      `JWT_SECRET` (fresh `openssl rand -hex 32`), `POCKETBASE_URL` (internal),
+      `POCKETBASE_ADMIN_EMAIL` / `POCKETBASE_ADMIN_PASSWORD` (must match the
+      live superuser — `docker exec -it <pb-container> ./pocketbase superuser upsert <email> <pw>`),
+      `CORS_ORIGINS` (`https://www.<domain>,https://<domain>`),
+      `APP_DOMAIN`. Leave `SMTP_*`, `BREVO_API_KEY`, `MAIL_FROM` blank.
+- [ ] `api.<domain>` A record → VPS IP, certificate issued, health returns 200.
+- [ ] PocketBase port 8090 not directly exposed (see STEP 4).
+- [ ] Backups = the PocketBase Docker volume (`pb_data`).
+
+---
+
+## STEP 6 — Next session (not now): email
+
+Brevo SMTP + custom domain mailbox. `SMTP_*`, `BREVO_API_KEY`, `MAIL_FROM`
+stay blank until then.
 
 ---
 
 ## Troubleshooting quick hits
-- **Deploy unhealthy / rolled back** → should be impossible now (health is
-  always 200 while the process runs). If it still happens, the container
-  isn't running at all — read the build logs, not the health logs.
-- **Health says `"superuserConfigured":false`** → `POCKETBASE_ADMIN_EMAIL` /
-  `POCKETBASE_ADMIN_PASSWORD` env vars missing on the API resource.
-- **Health says `"authenticated":false` with an error** → credentials don't
-  match PocketBase's superuser, or `POCKETBASE_URL` is wrong/not reachable.
-  Re-run the `superuser upsert` command and check the internal URL. The API
-  retries by itself every 30s — no redeploy needed after fixing PocketBase.
-- **Data requests return 500 while health is 200** → that's by design: the
-  healthcheck stays green while auth is broken; check `db.error` and the logs.
+
+- **`schema:verify` exits 1 / reports DRIFT** → the live schema differs from
+  the code (a field was added to `SCHEMAS` or changed by hand). Fix:
+  `npm run schema:push`, then re-verify.
+- **Dashboard import says the collections already exist** → use Path B
+  (`npm run schema:push`) instead; it attaches the existing ids.
+- **Health `"superuserConfigured":false`** → `POCKETBASE_ADMIN_EMAIL` /
+  `POCKETBASE_ADMIN_PASSWORD` missing on the API resource.
+- **Health `"authenticated":false` with an error** → creds don't match the
+  PocketBase superuser, or `POCKETBASE_URL` is wrong. Re-run the
+  `superuser upsert` command; the API retries every 30s (no redeploy needed).
+- **Data requests 500 while health is 200** → by design (health stays green
+  while auth is broken); read `db.error` and the API logs.
 - **CORS error from the website** → add the exact frontend origin to
   `CORS_ORIGINS`.
-- **HTTPS not issued** → `api` DNS must resolve to the VPS and the domain must
-  be attached to the service before deploying.
+- **Schema questions** → the source of truth is `SCHEMAS` in
+  `crossborders-api/src/db.js`; the blueprint JSON is generated from it
+  (`npm run schema:export`) — never hand-edit the JSON.

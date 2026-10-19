@@ -384,7 +384,13 @@
       },
       {
         "name": "body_text",
-        "type": "text"
+        "type": "text",
+        "max": 25000
+      },
+      {
+        "name": "body_html",
+        "type": "text",
+        "max": 100000
       },
       {
         "name": "message_id",

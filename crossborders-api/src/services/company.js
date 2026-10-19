@@ -10,7 +10,7 @@ export const COMPANY = {
   address: 'Kanlica Mall, Halilpeli Cesmesi Sok, No. 10/3 PK 34810 Beykoz / İstanbul Türkiye',
   fax: '+90 (0) 216 331 2525 / +90 (0) 216 331 25 35',
   reg_no: '07537120',
-  email: 'crossborder.delivery@outlook.com',
+  email: 'crossborder.delivery@crossbordersdeliveries.site',
   website: 'crossbordersdeliveries.com',
   phone: '+90 806 055 2123',
   signatory: 'Mr. Atisen Baris',
