@@ -32,9 +32,7 @@ const sample = {
   package_quantity: 2,
   package_description: 'Electronics & accessories',
   base_freight: 450000,
-  surcharge_fuel: 32500,
-  surcharge_customs: 78000,
-  total_cost: 560500,
+  total_cost: 450000,
   checkpoints: [],
 }
 

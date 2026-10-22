@@ -11,8 +11,8 @@ const EMPTY_FORM = {
   recipient_name: '', recipient_email: '', recipient_phone: '', recipient_address: '',
   recipient_city: '', recipient_country: '', origin_city: '', destination_city: '',
   cargo_type: 'Air', package_weight: '', package_quantity: 1, package_description: '',
-  // Financials: one simple price (no fuel/customs fees), paid & USD by default
-  base_freight: '', surcharge_fuel: '', surcharge_customs: '', payment_status: 'Paid', currency: 'USD',
+  // Financials: one all-in shipping fee, paid & USD by default
+  base_freight: '', payment_status: 'Paid', currency: 'USD',
 }
 
 export default function Shipments() {
@@ -191,12 +191,8 @@ export default function Shipments() {
 
             <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials</h4>
             <div className="form-grid">
-              {/* The price you type here IS the total the customer sees */}
-              <Field label="Price"><input type="number" step="0.01" min="0" value={form.base_freight} onChange={setF('base_freight')} /></Field>
-              {/* TEMP DISABLED — extra fees commented out; price is all-in
-              <Field label="Fuel surcharge"><input type="number" step="0.01" min="0" value={form.surcharge_fuel} onChange={setF('surcharge_fuel')} /></Field>
-              <Field label="Customs & handling"><input type="number" step="0.01" min="0" value={form.surcharge_customs} onChange={setF('surcharge_customs')} /></Field>
-              */}
+              {/* The shipping fee you type here IS the total the customer sees */}
+              <Field label="Shipping Fee"><input type="number" step="0.01" min="0" value={form.base_freight} onChange={setF('base_freight')} /></Field>
               <Field label="Payment status">
                 <select value={form.payment_status} onChange={setF('payment_status')}>
                   <option>Paid</option><option>Unpaid</option><option>Pending</option>

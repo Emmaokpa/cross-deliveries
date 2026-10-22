@@ -283,10 +283,10 @@ function pricingTable(doc, shipment) {
   doc.text(`AMOUNT (${cur})`, x0 + width - 130, y + 7, { width: 118, align: 'right', lineBreak: false })
   y += 22
 
+  // One simple all-in price — no fuel/customs surcharge rows (matching the
+  // admin dashboard, where those fields were removed).
   const rows = [
-    ['Base Freight Charges', shipment.base_freight],
-    ['Fuel Surcharge', shipment.surcharge_fuel],
-    ['Customs & Handling', shipment.surcharge_customs],
+    ['Shipping Fee', shipment.base_freight],
   ]
   rows.forEach(([label, amount], i) => {
     if (i % 2 === 0) doc.rect(x0, y, width, 22).fill('#181C23')

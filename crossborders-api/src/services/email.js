@@ -265,10 +265,10 @@ function renderTemplate(shipment) {
           </tr>`
     : ''
 
+  // One simple all-in price — no fuel/customs surcharge rows (matching the
+  // admin dashboard, where those fields were removed).
   const costRows = [
-    ['Base Freight Charges', fmt(shipment.base_freight, cur)],
-    ['Fuel Surcharge', fmt(shipment.surcharge_fuel, cur)],
-    ['Customs & Handling', fmt(shipment.surcharge_customs, cur)],
+    ['Shipping Fee', fmt(shipment.base_freight, cur)],
   ]
 
   const rowHtml = costRows

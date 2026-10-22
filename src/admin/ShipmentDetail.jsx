@@ -408,7 +408,7 @@ export default function ShipmentDetail() {
       origin_city: s.origin_city || '', destination_city: s.destination_city || '',
       cargo_type: s.cargo_type || 'Air', package_weight: s.package_weight ?? '',
       package_quantity: s.package_quantity ?? 1, package_description: s.package_description || '',
-      base_freight: s.base_freight ?? '', surcharge_fuel: s.surcharge_fuel ?? '', surcharge_customs: s.surcharge_customs ?? '',
+      base_freight: s.base_freight ?? '',
       payment_status: s.payment_status || 'Paid', currency: s.currency || 'USD',
     })
     setEditOpen(true)
@@ -423,8 +423,8 @@ export default function ShipmentDetail() {
       for (const k of ['package_weight', 'package_quantity', 'base_freight']) {
         if (body[k] === '') delete body[k]
       }
-      // Fuel & customs fee fields are commented out of this form — the price
-      // typed above IS the total, so clear any legacy surcharges on record.
+      // The shipping fee typed above IS the total — clear the legacy
+      // surcharge fields so stale fuel/customs values can't inflate it.
       body.surcharge_fuel = 0
       body.surcharge_customs = 0
       const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body })
@@ -566,11 +566,7 @@ export default function ShipmentDetail() {
               <div className="kv"><span className="k">Delivery address</span><span className="v">{s.recipient_address || '—'}, {s.recipient_city} {s.recipient_country}</span></div>
               <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • ×{s.package_quantity}</span></div>
               <div className="kv"><span className="k">Package contents</span><span className="v">{s.package_description || '—'}</span></div>
-              {/* The price IS the total — fuel surcharge & customs fee rows commented out
-              <div className="kv"><span className="k">Fuel surcharge</span><span className="v">{fmtMoney(s.surcharge_fuel, s.currency)}</span></div>
-              <div className="kv"><span className="k">Customs & handling</span><span className="v">{fmtMoney(s.surcharge_customs, s.currency)}</span></div>
-              */}
-              <div className="kv"><span className="k">Price</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
+              <div className="kv"><span className="k">Shipping Fee</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
               <div className="kv"><span className="k">Total</span><span className="v" style={{ fontWeight: 700 }}>{fmtMoney(s.total_cost, s.currency)}</span></div>
               <div className="kv"><span className="k">Payment</span><span className="v"><Badge value={s.payment_status} /></span></div>
               <div className="kv"><span className="k">Last email sent</span><span className="v">{s.email_sent_at ? fmtDate(s.email_sent_at) : 'Never'}</span></div>
@@ -772,12 +768,8 @@ export default function ShipmentDetail() {
                   ))}
                 </select>
               </Field>
-              {/* The price you type here IS the total the customer sees */}
-              <Field label="Price"><input type="number" step="0.01" min="0" value={editForm.base_freight} onChange={setE('base_freight')} /></Field>
-              {/* TEMP DISABLED — extra fees commented out; price is all-in
-              <Field label="Fuel surcharge"><input type="number" step="0.01" min="0" value={editForm.surcharge_fuel} onChange={setE('surcharge_fuel')} /></Field>
-              <Field label="Customs & handling"><input type="number" step="0.01" min="0" value={editForm.surcharge_customs} onChange={setE('surcharge_customs')} /></Field>
-              */}
+              {/* The shipping fee you type here IS the total the customer sees */}
+              <Field label="Shipping Fee"><input type="number" step="0.01" min="0" value={editForm.base_freight} onChange={setE('base_freight')} /></Field>
               <Field label="Payment status">
                 <select value={editForm.payment_status} onChange={setE('payment_status')}>
                   <option>Paid</option><option>Unpaid</option><option>Pending</option>

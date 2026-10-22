@@ -145,11 +145,10 @@ export default function QuoteCalculator() {
           </div>
           <table className="mt-3 w-full text-[13.5px]">
             <tbody>
+              {/* One all-in Shipping Fee line — fuel/customs surcharges are
+                  folded into it (pricing unchanged, just not itemized). */}
               {[
-                [quote.service_label + ' — ' + quote.zone_label, naira(quote.base_freight)],
-                [`Weight (${quote.chargeable_weight} kg chargeable)`, 'included in freight'],
-                ['Fuel surcharge', naira(quote.fuel_surcharge)],
-                ['Customs & handling', naira(quote.customs_handling)],
+                [`Shipping Fee — ${quote.service_label} (${quote.chargeable_weight} kg chargeable)`, naira(quote.base_freight + quote.fuel_surcharge + quote.customs_handling)],
                 ...(quote.insurance ? [['Insurance', naira(quote.insurance)]] : []),
               ].map(([k, v], i) => (
                 <tr key={i} className="border-b border-neutral-100 last:border-0">
