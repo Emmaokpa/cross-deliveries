@@ -53,19 +53,28 @@ export function TrackingResult({ result }) {
   // ── Section 1: Shipment Information (exact field order per spec) ──
   // Section 1 field order + wording matches the spec exactly:
   // Origin, Package, Status, Destination, Carrier, Type of Shipment,
-  // Weight, Shipment Mode, Carrier Reference No., Product, Qty.
+  // Weight, Shipment Mode, Carrier Reference No., Product, Quantity, Product Status.
+  const displayStatus = result.current_status && result.current_status !== '—'
+    ? result.current_status
+    : '—'
+
+  const displayProduct = result.package_description && result.package_description !== '—'
+    ? result.package_description
+    : ''
+
   const infoFields = [
-    ['Origin', result.origin_city || '—'],
-    ['Package', result.package_description || '—'],
-    ['Status', result.current_status || '—'],
-    ['Destination', result.destination_city || '—'],
+    ['Origin', result.origin_city && result.origin_city !== '—' ? result.origin_city : '—'],
+    ['Package', displayProduct],
+    ['Status', displayStatus],
+    ['Destination', result.destination_city && result.destination_city !== '—' ? result.destination_city : '—'],
     ['Carrier', TRACKING_PAGE.carrier],
-    ['Type of Shipment', result.cargo_type ? `${result.cargo_type} Freight` : '—'],
+    ['Type of Shipment', result.cargo_type && result.cargo_type !== '—' ? `${result.cargo_type} Freight` : '—'],
     ['Weight', weightLabel(result)],
-    ['Shipment Mode', result.cargo_type ? `${result.cargo_type} Freight` : '—'],
-    ['Carrier Reference No.', result.tracking_number || '—'],
-    ['Product', result.package_description || '—'],
-    ['Qty', String(result.package_quantity ?? 1)],
+    ['Shipment Mode', result.cargo_type && result.cargo_type !== '—' ? `${result.cargo_type} Freight` : '—'],
+    ['Carrier Reference No.', result.tracking_number && result.tracking_number !== '—' ? result.tracking_number : '—'],
+    ['Product', displayProduct],
+    ['Quantity', String(result.package_quantity ?? 1)],
+    ['Product Status', displayStatus],
   ]
 
   function weightLabel(r) {
@@ -78,10 +87,10 @@ export function TrackingResult({ result }) {
   const historyEntries = (result.checkpoints || []).map((cp) => [
     ['Date', isoDate(cp.timestamp)],
     ['Time', clockTime(cp.timestamp)],
-    ['Location', cp.location || '—'],
-    ['Status', <span className="inline-block rounded-full bg-[#fdeaec] px-2 py-0.5 text-xs font-semibold text-primary">{cp.status_tag || '—'}</span>],
-    ['Updated By', cp.updated_by || '—'],
-    ['Remarks', cp.admin_notes || '—'],
+    ['Location', cp.location && cp.location !== '—' ? cp.location : '—'],
+    ['Status', <span className="inline-block rounded-full bg-[#fdeaec] px-2 py-0.5 text-xs font-semibold text-primary">{cp.status_tag && cp.status_tag !== '—' ? cp.status_tag : '—'}</span>],
+    ['Updated By', cp.updated_by && cp.updated_by !== '—' ? cp.updated_by : '—'],
+    ['Remarks', cp.admin_notes && cp.admin_notes !== '—' ? cp.admin_notes : '—'],
   ])
 
   return (
@@ -126,10 +135,10 @@ export function TrackingResult({ result }) {
         <SectionTitle>Shipment Information</SectionTitle>
         <div className="mt-5 flex flex-col gap-5 text-center sm:flex-row sm:grid-cols-2 sm:justify-center sm:gap-x-10 sm:gap-y-5">
           {infoFields.map(([label, value]) => (
-            <div key={label} className="min-w-0">
+            <div key={label}>
               <dt className="text-[13px] font-bold text-navy">{label}:</dt>
               <dd className="mt-1 break-words text-[14px] font-normal text-neutral-700">
-                {value}
+                {value ?? ""}
               </dd>
             </div>
           ))}
@@ -139,30 +148,25 @@ export function TrackingResult({ result }) {
       {/* ═══ SECTION 2: Shipment History ═══
        * Left-aligned 2-column layout per spec: Label on the left, Value on
        * the right, one row per spec field, with horizontal dividers between
-       * fields. Entire history entry is a white stacked card.
+       * fields. Entire history entry is a white stacked card. The card grid
+       * is responsive: 1 column on mobile, 2 on tablet, 3 on desktop,
+       * 4 on wide desktop, 5 on very wide desktop.
        ═══ */}
       <section className="mt-8">
         <SectionTitle>Shipment History</SectionTitle>
         {historyEntries.length > 0 ? (
-          <div className="mt-4 space-y-4">
-            {historyEntries.map((rows, i) => (
+          <div className="mt-5 flex flex-col gap-5 text-center sm:flex-row sm:grid-cols-2 sm:justify-center lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {historyEntries.map((row) => (
               <div
-                key={`${rows[0][1]}-${i}`}
-                className="overflow-hidden rounded-sm border border-[#E5E7EB] bg-white shadow-sm"
+                key={row.label}
+                className="mb-4 overflow-hidden rounded-sm border border-[#E5E7EB] bg-white shadow-sm"
               >
-                {rows.map(([label, value], j) => (
-                  <div
-                    key={label}
-                    className={`flex items-start justify-between gap-4 px-4 py-2.5 ${
-                      j > 0 ? 'border-t border-[#E5E7EB]' : ''
-                    }`}
-                  >
-                    <span className="text-[13.5px] font-bold text-navy">{label}:</span>
-                    <span className="min-w-0 break-words text-right text-[13.5px] text-neutral-700">
-                      {value}
-                    </span>
-                  </div>
-                ))}
+                <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-[#E5E7EB] bg-[#FAFBFC]">
+                  <span className="text-[13px] font-bold text-navy">{row.label}:</span>
+                  <span className="min-w-0 max-w-[60%] text-[14px] font-normal text-[#E5E7EB] truncate">
+                    {row.value}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
