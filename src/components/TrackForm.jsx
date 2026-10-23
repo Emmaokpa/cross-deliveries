@@ -1,8 +1,180 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fmtDate } from '../dates.js'
+import { fmtDate, parseDate } from '../dates.js'
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
+// Public-facing carrier / shipper identity for the tracking page only.
+// Kept separate from the admin + API sender constants on purpose: the
+// tracking page is a public recipient-facing view, so Carrier is the
+// carrier brand people recognise (e.g. DHL), not the sender legal name.
+export const TRACKING_PAGE = {
+  carrier: 'CrossBordersDeliveries',
+}
+
+// History date → ISO `YYYY-MM-DD` (spec: 2026-06-27)
+function isoDate(value) {
+  const d = parseDate(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+// History time → 12-hour `hh:mm am/pm` (spec: 02:51 am)
+function clockTime(value) {
+  const d = parseDate(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  let h = d.getHours()
+  const ampm = h >= 12 ? 'pm' : 'am'
+  h = h % 12 || 12
+  return `${String(h).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+}
+
+// Centered section heading with the clean divider underneath (spec header rule)
+function SectionTitle({ children }) {
+  return (
+    <div className="text-center">
+      <h4 className="font-heading text-h4 font-bold text-navy">{children}</h4>
+      <div className="mx-auto mt-2 h-px w-4/5 max-w-sm bg-[#E5E7EB]" />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TRACKING RESULT — two-section layout per the reference design:
+//   1. "Shipment Information" — centered key/value grid (exact field order)
+//   2. "Shipment History" — stacked cards, one row per history field
+// The progress bar was removed from this view on purpose.
+// ─────────────────────────────────────────────────────────────────
+export function TrackingResult({ result }) {
+  if (!result) return null
+
+  // ── Section 1: Shipment Information (exact field order per spec) ──
+  // Section 1 field order + wording matches the spec exactly:
+  // Origin, Package, Status, Destination, Carrier, Type of Shipment,
+  // Weight, Shipment Mode, Carrier Reference No., Product, Qty.
+  const infoFields = [
+    ['Origin', result.origin_city || '—'],
+    ['Package', result.package_description || '—'],
+    ['Status', result.current_status || '—'],
+    ['Destination', result.destination_city || '—'],
+    ['Carrier', TRACKING_PAGE.carrier],
+    ['Type of Shipment', result.cargo_type ? `${result.cargo_type} Freight` : '—'],
+    ['Weight', weightLabel(result)],
+    ['Shipment Mode', result.cargo_type ? `${result.cargo_type} Freight` : '—'],
+    ['Carrier Reference No.', result.tracking_number || '—'],
+    ['Product', result.package_description || '—'],
+    ['Qty', String(result.package_quantity ?? 1)],
+  ]
+
+  function weightLabel(r) {
+    const w = r.package_weight
+    if (w === undefined || w === null || Number(w) <= 0) return '—'
+    return `${w}kg`
+  }
+
+  // ── Section 2: Shipment History (field order + wording per spec) ──
+  const historyEntries = (result.checkpoints || []).map((cp) => [
+    ['Date', isoDate(cp.timestamp)],
+    ['Time', clockTime(cp.timestamp)],
+    ['Location', cp.location || '—'],
+    ['Status', <span className="inline-block rounded-full bg-[#fdeaec] px-2 py-0.5 text-xs font-semibold text-primary">{cp.status_tag || '—'}</span>],
+    ['Updated By', cp.updated_by || '—'],
+    ['Remarks', cp.admin_notes || '—'],
+  ])
+
+  return (
+    <div className="mt-5 border-t-2 border-primary pt-4 text-left">
+      {/* Header — reference number + live status (progress bar removed) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="font-body text-h4 font-normal">{result.tracking_number}</h4>
+        <span className="rounded-full bg-primary px-3 py-0.5 text-sm font-semibold text-white">
+          {result.current_status}
+        </span>
+      </div>
+
+      {result.current_status === 'Delivered' && (
+        <div className="mt-4 rounded-sm border-2 border-[#0E7A3D] bg-[#E9F6EE] px-4 py-3 text-center">
+          <p className="font-heading text-lg font-bold text-[#0E6B39]">✓ DELIVERED</p>
+          {result.delivered_at && (
+            <p className="text-[13px] text-[#2F6B4C]">
+              {fmtDate(result.delivered_at)}
+            </p>
+          )}
+          {result.pod?.receiver_name && (
+            <p className="mt-1 text-[13px] text-[#2F6B4C]">
+              Received by <strong>{result.pod.receiver_name}</strong>
+            </p>
+          )}
+        </div>
+      )}
+      {result.estimated_delivery && result.current_status !== 'Delivered' && (
+        <p className="mt-3 rounded-sm bg-[#f2f7f3] px-3 py-2 text-[13.5px] text-[#0E6B39]">
+          Estimated delivery:{' '}
+          <strong>{fmtDate(result.estimated_delivery)}</strong>
+        </p>
+      )}
+
+      {/* ═══ SECTION 1: Shipment Information ═══
+       * Centered heading + divider, then a centered key/value list where each
+       * label sits stacked above its value (spec: "Labels stacked vertically
+       * above their values"). 1-column on narrow screens, 2-col on wide so
+       * the block stays compact without losing the vertical label/value stack.
+       ═══ */}
+      <section className="mt-7">
+        <SectionTitle>Shipment Information</SectionTitle>
+        <div className="mt-5 flex flex-col gap-5 text-center sm:flex-row sm:grid-cols-2 sm:justify-center sm:gap-x-10 sm:gap-y-5">
+          {infoFields.map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-[13px] font-bold text-navy">{label}:</dt>
+              <dd className="mt-1 break-words text-[14px] font-normal text-neutral-700">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ SECTION 2: Shipment History ═══
+       * Left-aligned 2-column layout per spec: Label on the left, Value on
+       * the right, one row per spec field, with horizontal dividers between
+       * fields. Entire history entry is a white stacked card.
+       ═══ */}
+      <section className="mt-8">
+        <SectionTitle>Shipment History</SectionTitle>
+        {historyEntries.length > 0 ? (
+          <div className="mt-4 space-y-4">
+            {historyEntries.map((rows, i) => (
+              <div
+                key={`${rows[0][1]}-${i}`}
+                className="overflow-hidden rounded-sm border border-[#E5E7EB] bg-white shadow-sm"
+              >
+                {rows.map(([label, value], j) => (
+                  <div
+                    key={label}
+                    className={`flex items-start justify-between gap-4 px-4 py-2.5 ${
+                      j > 0 ? 'border-t border-[#E5E7EB]' : ''
+                    }`}
+                  >
+                    <span className="text-[13.5px] font-bold text-navy">{label}:</span>
+                    <span className="min-w-0 break-words text-right text-[13.5px] text-neutral-700">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-sm bg-[#F8F9FB] px-4 py-3 text-center text-sm text-muted">
+            No shipment updates recorded yet — check back soon.
+          </p>
+        )}
+      </section>
+    </div>
+  )
+}
 
 export default function TrackForm() {
   const [searchParams] = useSearchParams()
@@ -10,14 +182,12 @@ export default function TrackForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
-  const [searched, setSearched] = useState(false)
 
   const lookup = async (value) => {
     const target = String(value ?? number).trim()
     if (!target) return
     setLoading(true)
     setError('')
-    setSearched(true)
     try {
       const res = await fetch(`${API_ORIGIN}/api/v1/track/${encodeURIComponent(target)}`)
       const data = await res.json()
@@ -79,72 +249,7 @@ export default function TrackForm() {
         </div>
       )}
 
-      {result && (
-        <div className="mt-5 border-t-2 border-primary pt-4 text-left">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h4 className="font-body text-h4 font-normal">{result.tracking_number}</h4>
-            <span className="rounded-full bg-primary px-3 py-0.5 text-sm font-semibold text-white">
-              {result.current_status}
-            </span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e5e9f0]">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-500"
-              style={{ width: `${result.progress_percentage}%` }}
-            />
-          </div>
-          {result.current_status === 'Delivered' && (
-            <div className="mt-4 rounded-sm border-2 border-[#0E7A3D] bg-[#E9F6EE] px-4 py-3 text-center">
-              <p className="font-heading text-lg font-bold text-[#0E6B39]">✓ DELIVERED</p>
-              {result.delivered_at && (
-                <p className="text-[13px] text-[#2F6B4C]">
-                  {fmtDate(result.delivered_at)}
-                </p>
-              )}
-              {result.pod?.receiver_name && (
-                <p className="mt-1 text-[13px] text-[#2F6B4C]">
-                  Received by <strong>{result.pod.receiver_name}</strong>
-                </p>
-              )}
-            </div>
-          )}
-          {result.estimated_delivery && result.current_status !== 'Delivered' && (
-            <p className="mt-3 rounded-sm bg-[#f2f7f3] px-3 py-2 text-[13.5px] text-[#0E6B39]">
-              Estimated delivery:{' '}
-              <strong>{fmtDate(result.estimated_delivery)}</strong>
-            </p>
-          )}
-          <p className="mt-2">
-            <strong className="text-black">Route:</strong> {result.origin_city || '—'} →{' '}
-            {result.destination_city || '—'} • <strong className="text-black">Service:</strong>{' '}
-            {result.cargo_type} freight
-          </p>
-          {result.checkpoints?.length > 0 && (
-            <>
-              <h4 className="mt-4 font-body text-h4 font-normal">Shipment Journey</h4>
-              <ul className="relative mt-2.5 list-none space-y-4 pl-6 before:absolute before:bottom-1.5 before:left-[7px] before:top-1.5 before:w-0.5 before:bg-[#e5e9f0]">
-                {result.checkpoints.map((cp, i) => (
-                  <li
-                    key={`${cp.timestamp}-${i}`}
-                    className={`relative before:absolute before:left-[-22px] before:top-1 before:size-2.5 before:rounded-full before:border-[3px] before:border-primary before:bg-white ${
-                      i === 0 ? 'before:bg-primary' : ''
-                    }`}
-                  >
-                    <div className="font-heading font-semibold text-black">
-                      {cp.location}{' '}
-                      <span className="ml-1.5 inline-block rounded-full bg-[#fdeaec] px-2 py-px align-middle text-xs font-semibold text-primary">
-                        {cp.status_tag}
-                      </span>
-                    </div>
-                    <div className="text-[0.82rem] text-muted">{fmtDate(cp.timestamp)}</div>
-                    {cp.admin_notes && <div className="mt-0.5 text-sm text-muted">{cp.admin_notes}</div>}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
+      <TrackingResult result={result} />
     </div>
   )
 }

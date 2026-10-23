@@ -24,7 +24,10 @@ router.get('/track/:tracking_id', async (req, res) => {
     const checkpoints = (shipment.checkpoints || [])
       .slice()
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .map(({ timestamp, location, status_tag, admin_notes }) => ({ timestamp, location, status_tag, admin_notes }))
+      .map(({ timestamp, location, status_tag, admin_notes, updated_by }) => ({
+        timestamp, location, status_tag, admin_notes,
+        updated_by: updated_by || null,
+      }))
 
     const isDelivered = shipment.current_status === 'Delivered'
     const pod = isDelivered && shipment.pod?.receiver_name
@@ -42,6 +45,8 @@ router.get('/track/:tracking_id', async (req, res) => {
       recipient_country: shipment.recipient_country,
       cargo_type: shipment.cargo_type,
       package_description: shipment.package_description,
+      package_weight: shipment.package_weight ?? null,
+      package_quantity: shipment.package_quantity ?? null,
       checkpoints,
       estimated_delivery: shipment.estimated_delivery || null,
       delivered_at: isDelivered ? shipment.delivered_at || null : null,
