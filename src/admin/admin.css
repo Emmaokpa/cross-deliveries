@@ -121,9 +121,13 @@
 
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0 18px;
 }
+/* Inputs/selects have a large intrinsic min-width; let the grid cell shrink
+   so modals and cards never overflow horizontally on laptop screens. */
+.form-grid > * { min-width: 0; }
+.form-grid input, .form-grid select { width: 100%; min-width: 0; }
 
 .form-grid .span-2 {
   grid-column: span 2;
@@ -538,12 +542,16 @@ table.data-table {
 .alert-warn { background: #fbf1de; color: #8a5a10; border: 1px solid #f0dcae; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+/* Grid cards must be allowed to shrink below their content's min-content
+   width, otherwise long emails/addresses push the card past the viewport
+   (horizontal scroll) on laptop screens. */
+.grid-2 > * { min-width: 0; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 
 .kv-list .kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px dashed #eef1f6; font-size: 13.5px; }
 .kv-list .kv:last-child { border-bottom: none; }
 .kv-list .k { color: var(--a-muted); }
-.kv-list .v { color: var(--a-text); font-weight: 500; text-align: right; }
+.kv-list .v { color: var(--a-text); font-weight: 500; text-align: right; overflow-wrap: anywhere; min-width: 0; }
 
 .modal-backdrop {
   position: fixed;
@@ -814,6 +822,14 @@ table.data-table.mail-table { font-size: 14.5px; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .mail-compose { grid-template-columns: 1fr; }
   .mail-preview-frame, .mail-preview-empty { height: 480px; }
+}
+
+/* Laptop widths (roughly 1025–1440px): equal, fully-fitting columns — the
+   1.1fr/0.9fr split plus wide content used to overflow the viewport. */
+@media (min-width: 1025px) and (max-width: 1440px) {
+  .grid-2[style] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
 }
 
 /* The shipment detail page sets gridTemplateColumns inline, which beats media

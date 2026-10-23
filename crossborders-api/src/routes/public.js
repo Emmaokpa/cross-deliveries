@@ -44,6 +44,7 @@ router.get('/track/:tracking_id', async (req, res) => {
       recipient_city: shipment.recipient_city,
       recipient_country: shipment.recipient_country,
       cargo_type: shipment.cargo_type,
+      carrier: shipment.carrier || 'DHL',
       package_description: shipment.package_description,
       package_weight: shipment.package_weight ?? null,
       package_quantity: shipment.package_quantity ?? null,

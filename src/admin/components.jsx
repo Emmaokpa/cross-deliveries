@@ -56,17 +56,6 @@ export function Badge({ value }) {
   return <span className={`badge ${statusClass(value)}`}>{value}</span>
 }
 
-export function Progress({ value }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${value ?? 0}%` }} />
-      </div>
-      <span style={{ fontSize: 12, color: '#6b7280' }}>{value ?? 0}%</span>
-    </div>
-  )
-}
-
 export function Field({ label, required, children }) {
   return (
     <div className="field">

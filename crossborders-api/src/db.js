@@ -89,6 +89,7 @@ export const SCHEMAS = {
       { name: 'origin_city', type: 'text' },
       { name: 'destination_city', type: 'text' },
       { name: 'cargo_type', type: 'select', values: CARGO_TYPES, maxSelect: 1 },
+      { name: 'carrier', type: 'select', values: ['DHL', 'FedEx'], maxSelect: 1, default: 'DHL' },
       { name: 'package_weight', type: 'number' },
       { name: 'package_dimensions', type: 'text' },
       { name: 'package_quantity', type: 'number' },

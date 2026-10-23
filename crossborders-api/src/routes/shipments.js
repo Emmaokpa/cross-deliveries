@@ -14,7 +14,7 @@ const SHIPMENT_FIELDS = [
   'sender_name', 'sender_email', 'sender_phone', 'sender_address',
   'recipient_name', 'recipient_email', 'recipient_phone', 'recipient_address',
   'recipient_city', 'recipient_country', 'origin_city', 'destination_city',
-  'cargo_type', 'package_weight', 'package_dimensions', 'package_quantity', 'package_description',
+  'cargo_type', 'carrier', 'package_weight', 'package_dimensions', 'package_quantity', 'package_description',
   'base_freight', 'surcharge_fuel', 'surcharge_customs', 'payment_status', 'estimated_delivery', 'currency',
 ]
 
@@ -25,6 +25,11 @@ function parseShipment(body) {
   }
   if (data.cargo_type && !['Air', 'Ocean', 'Road'].includes(data.cargo_type)) {
     throw new Error('cargo_type must be Air, Ocean or Road')
+  }
+  if (data.carrier) {
+    if (!['DHL', 'FedEx'].includes(data.carrier)) throw new Error('carrier must be DHL or FedEx')
+  } else {
+    delete data.carrier // blank → falls back to the DHL default
   }
   if (data.payment_status && !['Paid', 'Unpaid', 'Pending'].includes(data.payment_status)) {
     throw new Error('payment_status must be Paid, Unpaid or Pending')
@@ -125,6 +130,7 @@ router.post('/shipments', async (req, res) => {
       ...data,
       tracking_number: tracking,
       cargo_type: data.cargo_type || 'Air',
+      carrier: data.carrier || 'DHL',
       package_weight: data.package_weight || 0,
       package_dimensions: data.package_dimensions || '',
       package_quantity: data.package_quantity || 1,

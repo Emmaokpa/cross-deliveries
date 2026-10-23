@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from './api.js'
-import { Badge, Progress, fmtMoney, fmtDate } from './components.jsx'
+import { Badge, fmtMoney, fmtDate } from './components.jsx'
 import CopyChip from './copy.jsx'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
@@ -87,7 +87,7 @@ export default function Dashboard() {
           <div className="table-wrap">
             <table className="data-table stack-mobile">
               <thead>
-                <tr><th>Tracking</th><th>Recipient</th><th>Route</th><th>Status</th><th>Progress</th></tr>
+                <tr><th>Tracking</th><th>Recipient</th><th>Route</th><th>Status</th></tr>
               </thead>
               <tbody>
                 {shipments.slice(0, 6).map((s) => (
@@ -101,11 +101,10 @@ export default function Dashboard() {
                     <td data-label="Recipient">{s.recipient_name}</td>
                     <td data-label="Route" style={{ fontSize: 12.5 }}>{s.origin_city || '—'} → {s.destination_city || '—'}</td>
                     <td data-label="Status"><Badge value={s.current_status} /></td>
-                    <td data-label="Progress"><Progress value={s.progress_percentage} /></td>
                   </tr>
                 ))}
                 {!shipments.length && (
-                  <tr><td colSpan={5}><div className="empty-state">No shipments yet — create your first consignment.</div></td></tr>
+                  <tr><td colSpan={4}><div className="empty-state">No shipments yet — create your first consignment.</div></td></tr>
                 )}
               </tbody>
             </table>

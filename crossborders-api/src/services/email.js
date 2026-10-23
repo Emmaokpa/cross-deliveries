@@ -313,7 +313,7 @@ function renderTemplate(shipment) {
             </td>
           </tr>
 
-          <!-- ═══ Status + progress card ═══ -->
+          <!-- ═══ Status card ═══ -->
           <tr>
             <td class="cbd-pad" style="padding:14px 34px 0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_PANEL};border-radius:10px;border:1px solid ${DARK_LINE};">
@@ -324,13 +324,7 @@ function renderTemplate(shipment) {
                         <div style="font-size:10px;color:${MUTED};letter-spacing:1.4px;text-transform:uppercase;">Current Status</div>
                         <div style="font-size:16px;font-weight:bold;color:${WHITE};margin-top:3px;">{{current_status}}</div>
                       </td>
-                      <td align="right" valign="middle">
-                        <span style="display:inline-block;background:${CORAL};color:${WHITE};font-size:12px;font-weight:bold;padding:5px 14px;border-radius:999px;">{{progress_percentage}}% Complete</span>
-                      </td>
                     </tr></table>
-                    <div style="background:#262A33;border-radius:6px;height:9px;margin-top:12px;">
-                      <div style="background:linear-gradient(90deg,#3C5AA6,${CORAL});border-radius:6px;height:9px;width:{{progress_percentage}}%;"></div>
-                    </div>
                     <table role="presentation" width="100%" style="margin-top:14px;"><tr>
                       <td style="color:${WHITE};font-weight:bold;font-size:13px;">{{origin_city}}</td>
                       <td align="center" style="color:${CORAL};font-size:15px;">&#10230;</td>
@@ -448,7 +442,6 @@ export function fillTemplate(shipment) {
     .replaceAll('{{current_status}}', shipment.current_status)
     .replaceAll('{{origin_city}}', escapeHtml(shipment.origin_city || '—'))
     .replaceAll('{{destination_city}}', escapeHtml(shipment.destination_city || '—'))
-    .replaceAll('{{progress_percentage}}', String(shipment.progress_percentage ?? 0))
     .replaceAll('{{total_cost}}', fmt(shipment.total_cost, shipment.currency || 'NGN'))
     .replaceAll('{{tracking_url}}', TRACKING_URL(shipment.tracking_number))
 }

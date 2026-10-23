@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from './api.js'
-import { Badge, Field, Modal, Progress, EmptyState, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
+import { Badge, Field, Modal, EmptyState, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
 import { CURRENCIES } from './currencies.js'
 
@@ -10,7 +10,7 @@ const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out fo
 const EMPTY_FORM = {
   recipient_name: '', recipient_email: '', recipient_phone: '', recipient_address: '',
   recipient_city: '', recipient_country: '', origin_city: '', destination_city: '',
-  cargo_type: 'Air', package_weight: '', package_quantity: 1, package_description: '',
+  cargo_type: 'Air', carrier: 'DHL', package_weight: '', package_quantity: 1, package_description: '',
   // Financials: one all-in shipping fee, paid & USD by default
   base_freight: '', payment_status: 'Paid', currency: 'USD',
 }
@@ -105,7 +105,7 @@ export default function Shipments() {
             <thead>
               <tr>
                 <th>Tracking #</th><th>Recipient</th><th>Route</th><th>Cargo</th>
-                <th>Total</th><th>Payment</th><th>Status</th><th>Progress</th><th>Created</th>
+                <th>Total</th><th>Payment</th><th>Status</th><th>Created</th>
               </tr>
             </thead>
             <tbody>
@@ -134,12 +134,11 @@ export default function Shipments() {
                   <td data-label="Total" style={{ fontWeight: 600 }}>{fmtMoney(s.total_cost, s.currency)}</td>
                   <td data-label="Payment"><Badge value={s.payment_status} /></td>
                   <td data-label="Status"><Badge value={s.current_status} /></td>
-                  <td data-label="Progress"><Progress value={s.progress_percentage} /></td>
                   <td data-label="Created" style={{ fontSize: 12.5, color: '#6b7280', whiteSpace: 'nowrap' }}>{fmtDate(s.created_at)}</td>
                 </tr>
               ))}
               {!shipments.length && (
-                <tr><td colSpan={9}><EmptyState title="No shipments found" hint="Adjust filters or create a new consignment." /></td></tr>
+                <tr><td colSpan={8}><EmptyState title="No shipments found" hint="Adjust filters or create a new consignment." /></td></tr>
               )}
             </tbody>
           </table>
@@ -182,9 +181,12 @@ export default function Shipments() {
                   <option>Air</option><option>Ocean</option><option>Road</option>
                 </select>
               </Field>
-              {/* TEMP DISABLED — cargo weight field (restore by deleting the comment markers)
+              <Field label="Carrier">
+                <select value={form.carrier} onChange={setF('carrier')}>
+                  <option>DHL</option><option>FedEx</option>
+                </select>
+              </Field>
               <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={form.package_weight} onChange={setF('package_weight')} /></Field>
-              */}
               <Field label="Number of packages"><input type="number" min="1" value={form.package_quantity} onChange={setF('package_quantity')} /></Field>
               <Field label="Package contents"><input value={form.package_description} onChange={setF('package_description')} /></Field>
             </div>

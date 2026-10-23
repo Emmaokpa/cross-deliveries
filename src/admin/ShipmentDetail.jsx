@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { api, downloadBlob } from './api.js'
-import { Badge, Field, Modal, Progress, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
+import { Badge, Field, Modal, SenderInfo, fmtMoney, fmtDate, useToast } from './components.jsx'
 import CopyChip from './copy.jsx'
 import { CURRENCIES } from './currencies.js'
 import { parseDate } from '../dates.js'
@@ -9,8 +9,7 @@ import { COMPANY } from './company.js'
 
 const STATUSES = ['Created', 'Shipped', 'In Transit', 'Held at Customs', 'Out for Delivery', 'Delivered', 'On Hold']
 
-// Mirror of the backend STATUS_PROGRESS presets — shown as hints in forms
-const STATUS_DEFAULTS = Object.fromEntries(STATUSES.map((s, i) => [s, [5, 20, 45, 60, 85, 100, 50][i]]))
+const CARRIERS = ['DHL', 'FedEx']
 
 // Signature pad: draws with mouse/touch onto a canvas, exports PNG data URL
 function SignaturePad({ onChange }) {
@@ -87,52 +86,6 @@ function SignaturePad({ onChange }) {
   )
 }
 
-// Drag / type / nudge the progress bar, then save to the API
-function ProgressEditor({ value, busy, onSave }) {
-  const [draft, setDraft] = useState(value ?? 0)
-  useEffect(() => setDraft(value ?? 0), [value])
-  const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)))
-  const shown = clamp(draft)
-  const dirty = shown !== (value ?? 0)
-
-  return (
-    <div style={{ marginTop: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          value={shown}
-          onChange={(e) => setDraft(e.target.value)}
-          aria-label="Progress percentage slider"
-          style={{ flex: '1 1 170px', accentColor: 'var(--a-red)', cursor: 'pointer' }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={() => setDraft(shown - 1)} aria-label="Decrease 1%">−</button>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            aria-label="Progress percentage"
-            style={{ width: 72, textAlign: 'center', padding: '6px 8px', border: '1px solid #e4e8f0', borderRadius: 8 }}
-          />
-          <button type="button" className="btn-a btn-ghost-a btn-sm-a" onClick={() => setDraft(shown + 1)} aria-label="Increase 1%">＋</button>
-          <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
-        </div>
-        <button type="button" className="btn-a btn-primary-a btn-sm-a" disabled={!dirty || busy} onClick={() => onSave(shown)}>
-          {busy ? 'Saving…' : dirty ? 'Update Progress' : 'Saved ✓'}
-        </button>
-      </div>
-      <div className="progress-track" style={{ marginTop: 10 }}>
-        <div className="progress-fill" style={{ width: `${shown}%`, transition: 'width 0.25s ease' }} />
-      </div>
-    </div>
-  )
-}
-
 export default function ShipmentDetail() {
   const { id } = useParams()
   const { admin } = useOutletContext()
@@ -140,16 +93,15 @@ export default function ShipmentDetail() {
   const [shipment, setShipment] = useState(null)
   const [error, setError] = useState('')
 
-  const [statusForm, setStatusForm] = useState({ status: 'Shipped', location: '', notes: '', backdated_timestamp: '', trigger_email: true, progress_percentage: '' })
+  const [statusForm, setStatusForm] = useState({ status: 'Shipped', location: '', notes: '', backdated_timestamp: '', trigger_email: true })
   const [busy, setBusy] = useState(false)
 
   const [cpModal, setCpModal] = useState(null) // null | {mode:'add'} | {mode:'edit', cp}
-  const [cpForm, setCpForm] = useState({ timestamp: '', location: '', status_tag: '', admin_notes: '', set_status: '', progress_percentage: '' })
+  const [cpForm, setCpForm] = useState({ timestamp: '', location: '', status_tag: '', admin_notes: '', set_status: '' })
 
   const [etaEdit, setEtaEdit] = useState(false)
   const [etaValue, setEtaValue] = useState('')
   const [etaBusy, setEtaBusy] = useState(false)
-  const [progressBusy, setProgressBusy] = useState(false)
   const [curEdit, setCurEdit] = useState(false)
   const [curValue, setCurValue] = useState('')
   const [editOpen, setEditOpen] = useState(false)
@@ -185,11 +137,10 @@ export default function ShipmentDetail() {
     try {
       const body = { ...statusForm }
       if (!body.backdated_timestamp) delete body.backdated_timestamp
-      if (body.progress_percentage === '') delete body.progress_percentage
       const data = await api(`/v1/shipments/${s.id}/status`, { method: 'PATCH', body })
       setShipment(data.shipment)
       toast(
-        `Status set to ${body.status} (${data.shipment.progress_percentage}%).${
+        `Status set to ${body.status}.${
           data.email?.simulated
             ? ' Email simulated (no Brevo key).'
             : data.email?.queued
@@ -296,7 +247,7 @@ export default function ShipmentDetail() {
   }
 
   const openCpAdd = () => {
-    setCpForm({ timestamp: '', location: '', status_tag: s.current_status, admin_notes: '', set_status: '', progress_percentage: '' })
+    setCpForm({ timestamp: '', location: '', status_tag: s.current_status, admin_notes: '', set_status: '' })
     setCpModal({ mode: 'add' })
   }
 
@@ -308,7 +259,6 @@ export default function ShipmentDetail() {
       status_tag: cp.status_tag,
       admin_notes: cp.admin_notes || '',
       set_status: '',
-      progress_percentage: '',
     })
     setCpModal({ mode: 'edit', cp })
   }
@@ -319,12 +269,11 @@ export default function ShipmentDetail() {
       const body = { ...cpForm }
       if (!body.timestamp) delete body.timestamp
       if (!body.set_status) delete body.set_status
-      if (body.progress_percentage === '') delete body.progress_percentage
       if (cpModal.mode === 'add') {
         await api(`/v1/shipments/${s.id}/checkpoints`, { method: 'POST', body })
         toast(
-          body.set_status || body.progress_percentage !== undefined
-            ? 'Checkpoint added — journey & progress updated.'
+          body.set_status
+            ? 'Checkpoint added — journey & status updated.'
             : 'Checkpoint added to timeline.',
           'ok',
         )
@@ -406,7 +355,7 @@ export default function ShipmentDetail() {
       recipient_name: s.recipient_name || '', recipient_email: s.recipient_email || '', recipient_phone: s.recipient_phone || '', recipient_address: s.recipient_address || '',
       recipient_city: s.recipient_city || '', recipient_country: s.recipient_country || '',
       origin_city: s.origin_city || '', destination_city: s.destination_city || '',
-      cargo_type: s.cargo_type || 'Air', package_weight: s.package_weight ?? '',
+      cargo_type: s.cargo_type || 'Air', carrier: s.carrier || 'DHL', package_weight: s.package_weight ?? '',
       package_quantity: s.package_quantity ?? 1, package_description: s.package_description || '',
       base_freight: s.base_freight ?? '',
       payment_status: s.payment_status || 'Paid', currency: s.currency || 'USD',
@@ -435,19 +384,6 @@ export default function ShipmentDetail() {
       toast(err.message, 'err')
     } finally {
       setEditBusy(false)
-    }
-  }
-
-  const saveProgress = async (pct) => {
-    setProgressBusy(true)
-    try {
-      const data = await api(`/v1/shipments/${s.id}`, { method: 'PATCH', body: { progress_percentage: pct } })
-      setShipment(data.shipment)
-      toast(`Progress set to ${data.shipment.progress_percentage}%.`, 'ok')
-    } catch (err) {
-      toast(err.message, 'err')
-    } finally {
-      setProgressBusy(false)
     }
   }
 
@@ -511,11 +447,10 @@ export default function ShipmentDetail() {
         </div>
       </div>
 
-      <div className="grid-2" style={{ gridTemplateColumns: '1.1fr 0.9fr' }}>
+      <div className="grid-2" style={{ gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="a-card a-card-pad">
             <h3 style={{ margin: '0 0 6px', color: 'var(--a-navy)' }}>Consignment Overview</h3>
-            <ProgressEditor value={s.progress_percentage} busy={progressBusy} onSave={saveProgress} />
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {curEdit ? (
                 <form onSubmit={saveCurrency} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -565,6 +500,8 @@ export default function ShipmentDetail() {
               <div className="kv"><span className="k">Recipient</span><span className="v">{s.recipient_name} • {s.recipient_email}</span></div>
               <div className="kv"><span className="k">Delivery address</span><span className="v">{s.recipient_address || '—'}, {s.recipient_city} {s.recipient_country}</span></div>
               <div className="kv"><span className="k">Cargo</span><span className="v">{s.cargo_type} • ×{s.package_quantity}</span></div>
+              <div className="kv"><span className="k">Carrier</span><span className="v">{s.carrier || 'DHL'}</span></div>
+              <div className="kv"><span className="k">Weight</span><span className="v">{Number(s.package_weight) > 0 ? `${s.package_weight} kg` : '—'}</span></div>
               <div className="kv"><span className="k">Package contents</span><span className="v">{s.package_description || '—'}</span></div>
               <div className="kv"><span className="k">Shipping Fee</span><span className="v">{fmtMoney(s.base_freight, s.currency)}</span></div>
               <div className="kv"><span className="k">Total</span><span className="v" style={{ fontWeight: 700 }}>{fmtMoney(s.total_cost, s.currency)}</span></div>
@@ -583,16 +520,6 @@ export default function ShipmentDetail() {
                   </select>
                 </Field>
                 <Field label="Location"><input value={statusForm.location} onChange={(e) => setStatusForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Istanbul Hub" /></Field>
-                <Field label="Progress % (optional)">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={statusForm.progress_percentage}
-                    onChange={(e) => setStatusForm((f) => ({ ...f, progress_percentage: e.target.value }))}
-                    placeholder={`default ${STATUS_DEFAULTS[statusForm.status] ?? '—'}%`}
-                  />
-                </Field>
                 <Field label="Backdate (optional)"><input type="datetime-local" value={statusForm.backdated_timestamp} onChange={(e) => setStatusForm((f) => ({ ...f, backdated_timestamp: e.target.value }))} /></Field>
                 <Field label="Trigger email">
                   <select value={statusForm.trigger_email ? 'yes' : 'no'} onChange={(e) => setStatusForm((f) => ({ ...f, trigger_email: e.target.value === 'yes' }))}>
@@ -752,9 +679,12 @@ export default function ShipmentDetail() {
                   <option>Air</option><option>Ocean</option><option>Road</option>
                 </select>
               </Field>
-              {/* TEMP DISABLED — cargo weight field (restore by deleting the comment markers)
+              <Field label="Carrier">
+                <select value={editForm.carrier} onChange={setE('carrier')}>
+                  {CARRIERS.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
               <Field label="Weight (kg)"><input type="number" step="0.1" min="0" value={editForm.package_weight} onChange={setE('package_weight')} /></Field>
-              */}
               <Field label="Number of packages"><input type="number" min="1" value={editForm.package_quantity} onChange={setE('package_quantity')} /></Field>
               <Field label="Package contents"><input value={editForm.package_description} onChange={setE('package_description')} /></Field>
             </div>
@@ -866,16 +796,6 @@ export default function ShipmentDetail() {
                       <option value="">— keep current —</option>
                       {STATUSES.map((x) => <option key={x}>{x}</option>)}
                     </select>
-                  </Field>
-                  <Field label="Set progress %">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={cpForm.progress_percentage}
-                      onChange={(e) => setCpForm((f) => ({ ...f, progress_percentage: e.target.value }))}
-                      placeholder="keep current"
-                    />
                   </Field>
                 </>
               )}
