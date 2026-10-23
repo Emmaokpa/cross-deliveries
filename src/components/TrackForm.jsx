@@ -133,14 +133,22 @@ export function TrackingResult({ result }) {
       {/* ═══ SECTION 1: Shipment Information ═══
        * Centered heading + divider, then a centered key/value list where each
        * label sits stacked above its value (spec: "Labels stacked vertically
-       * above their values"). 1-column on narrow screens, 2-col on wide so
-       * the block stays compact without losing the vertical label/value stack.
+       * above their values").
+       * The field blocks wrap instead of cramming every field into one row:
+       * 1-col on mobile → 2-col on sm → 3-col on md → **5-col on lg+**
+       * (equivalent to `grid-template-columns: repeat(5, 1fr)`), so a laptop /
+       * desktop gets neat rows of 5 fields with no overflow. Each block's
+       * width accounts for the flex gaps so the columns stay evenly aligned,
+       * and a partially filled last row stays centered.
        ═══ */}
       <section className="mt-7">
         <SectionTitle>Shipment Information</SectionTitle>
-        <div className="mt-5 flex flex-col gap-5 text-center sm:flex-row sm:grid-cols-2 sm:justify-center sm:gap-x-10 sm:gap-y-5">
+        <div className="mt-5 flex flex-wrap justify-center gap-x-6 gap-y-5 text-center sm:gap-x-8">
           {infoFields.map(([label, value]) => (
-            <div key={label}>
+            <div
+              key={label}
+              className="w-full min-w-0 sm:w-[calc(50%_-_1rem)] md:w-[calc(33.333%_-_1.333rem)] lg:w-[calc(20%_-_1.6rem)]"
+            >
               <dt className="text-[13px] font-bold text-navy">{label}:</dt>
               <dd className="mt-1 break-words text-[14px] font-normal text-neutral-700">
                 {value ?? ""}

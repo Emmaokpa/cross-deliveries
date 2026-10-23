@@ -99,6 +99,10 @@
     strong{ font-weight:700; }
     .flex{ display:flex; }
     .flex-wrap{ flex-wrap:wrap; }
+    .justify-center{ justify-content:center; }
+    .gap-x-6{ column-gap:1.5rem; }
+    .gap-x-8{ column-gap:2rem; }
+    .gap-y-5{ row-gap:1.25rem; }
     .items-center{ align-items:center; }
     .justify-between{ justify-content:space-between; }
     .gap-3{ gap:0.75rem; }
@@ -120,6 +124,18 @@
       .sm\:grid-cols-2{ grid-template-columns:1fr 1fr; }
       .sm\:flex-row{ flex-direction:row; }
       .sm\:flex-col{ flex-direction:column; }
+    }
+    /* Section 1 field grid — mirrors TrackForm.jsx:
+       1-col → 2-col (sm) → 3-col (md) → 5-col (lg+), evenly spaced. */
+    @media (min-width:640px){
+      .sm\:gap-x-8{ column-gap:2rem; }
+      .sm\:w-\[calc\(50%_-_1rem\)\]{ width:calc(50% - 1rem); }
+    }
+    @media (min-width:768px){
+      .md\:w-\[calc\(33.333%_-_1.333rem\)\]{ width:calc(33.333% - 1.333rem); }
+    }
+    @media (min-width:1024px){
+      .lg\:w-\[calc\(20%_-_1.6rem\)\]{ width:calc(20% - 1.6rem); }
     }
   </style>
 </head>
@@ -286,10 +302,10 @@
       s1.className = 'mt-7'
       s1.appendChild(SectionTitle('Shipment Information'))
       const grid = document.createElement('div')
-      grid.className = 'mt-5 flex flex-col gap-5 text-center sm:flex-row sm:grid-cols-2 sm:justify-center sm:gap-x-10 sm:gap-y-5'
+      grid.className = 'mt-5 flex flex-wrap justify-center gap-x-6 gap-y-5 text-center sm:gap-x-8'
       infoFields.forEach(([label,value]) => {
         const block = document.createElement('div')
-        block.className = 'min-w-0'
+        block.className = 'w-full min-w-0 sm:w-[calc(50%_-_1rem)] md:w-[calc(33.333%_-_1.333rem)] lg:w-[calc(20%_-_1.6rem)]'
         const dt = document.createElement('dt')
         dt.className = 'text-[13px] font-bold text-navy'
         dt.textContent = `${label}:`
