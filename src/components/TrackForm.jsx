@@ -135,11 +135,10 @@ export function TrackingResult({ result }) {
        * label sits stacked above its value (spec: "Labels stacked vertically
        * above their values").
        * The field blocks wrap instead of cramming every field into one row:
-       * 1-col on mobile → 2-col on sm → 3-col on md → **5-col on lg+**
-       * (equivalent to `grid-template-columns: repeat(5, 1fr)`), so a laptop /
-       * desktop gets neat rows of 5 fields with no overflow. Each block's
-       * width accounts for the flex gaps so the columns stay evenly aligned,
-       * and a partially filled last row stays centered.
+       * 1-col on mobile → 2-col on sm → **3-col on md+**, i.e. 4 fields per
+       * column on laptop/desktop (12 fields = 3 neat columns of 4). Each
+       * block's width accounts for the flex gaps so the columns stay evenly
+       * aligned, and every row stays full and balanced.
        ═══ */}
       <section className="mt-7">
         <SectionTitle>Shipment Information</SectionTitle>
@@ -147,7 +146,7 @@ export function TrackingResult({ result }) {
           {infoFields.map(([label, value]) => (
             <div
               key={label}
-              className="w-full min-w-0 sm:w-[calc(50%_-_1rem)] md:w-[calc(33.333%_-_1.333rem)] lg:w-[calc(20%_-_1.6rem)]"
+              className="w-full min-w-0 sm:w-[calc(50%_-_1rem)] md:w-[calc(33.333%_-_1.333rem)]"
             >
               <dt className="text-[13px] font-bold text-navy">{label}:</dt>
               <dd className="mt-1 break-words text-[14px] font-normal text-neutral-700">

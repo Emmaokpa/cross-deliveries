@@ -126,16 +126,13 @@
       .sm\:flex-col{ flex-direction:column; }
     }
     /* Section 1 field grid — mirrors TrackForm.jsx:
-       1-col → 2-col (sm) → 3-col (md) → 5-col (lg+), evenly spaced. */
+       1-col → 2-col (sm) → 3-col (md+): 4 fields per column on desktop. */
     @media (min-width:640px){
       .sm\:gap-x-8{ column-gap:2rem; }
       .sm\:w-\[calc\(50%_-_1rem\)\]{ width:calc(50% - 1rem); }
     }
     @media (min-width:768px){
       .md\:w-\[calc\(33.333%_-_1.333rem\)\]{ width:calc(33.333% - 1.333rem); }
-    }
-    @media (min-width:1024px){
-      .lg\:w-\[calc\(20%_-_1.6rem\)\]{ width:calc(20% - 1.6rem); }
     }
   </style>
 </head>
@@ -305,7 +302,7 @@
       grid.className = 'mt-5 flex flex-wrap justify-center gap-x-6 gap-y-5 text-center sm:gap-x-8'
       infoFields.forEach(([label,value]) => {
         const block = document.createElement('div')
-        block.className = 'w-full min-w-0 sm:w-[calc(50%_-_1rem)] md:w-[calc(33.333%_-_1.333rem)] lg:w-[calc(20%_-_1.6rem)]'
+        block.className = 'w-full min-w-0 sm:w-[calc(50%_-_1rem)] md:w-[calc(33.333%_-_1.333rem)]'
         const dt = document.createElement('dt')
         dt.className = 'text-[13px] font-bold text-navy'
         dt.textContent = `${label}:`
