@@ -193,8 +193,9 @@ export default function Shipments() {
 
             <h4 style={{ color: 'var(--a-navy)', margin: '18px 0 10px' }}>Financials</h4>
             <div className="form-grid">
-              {/* The shipping fee you type here IS the total the customer sees */}
+              {/* Shipping fee field removed from shipment creation —
               <Field label="Shipping Fee"><input type="number" step="0.01" min="0" value={form.base_freight} onChange={setF('base_freight')} /></Field>
+              */}
               <Field label="Payment status">
                 <select value={form.payment_status} onChange={setF('payment_status')}>
                   <option>Paid</option><option>Unpaid</option><option>Pending</option>

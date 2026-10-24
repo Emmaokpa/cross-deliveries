@@ -154,7 +154,7 @@ router.post('/shipments', async (req, res) => {
           location: data.origin_city || 'Origin facility',
           status_tag: 'Created',
           admin_notes: 'Consignment created in system',
-          updated_by: req.admin?.name || 'Cross Borders Operations',
+          updated_by: 'Halilpeli',
         },
       ],
     })
@@ -277,7 +277,7 @@ router.patch('/shipments/:id/status', async (req, res) => {
       location: location || shipment.origin_city || '—',
       status_tag: status,
       admin_notes: notes || '',
-      updated_by: req.admin?.name || 'Cross Borders Operations',
+      updated_by: 'Halilpeli',
     })
     const updated = await saveShipment(shipment)
     await audit(req.admin, 'shipment.status_changed', 'shipment', String(updated._id), `${updated.tracking_number}: → ${status}`)
@@ -328,7 +328,7 @@ router.post('/shipments/:id/checkpoints', async (req, res) => {
     }
     const ts = timestamp ? new Date(timestamp) : new Date()
     if (Number.isNaN(ts.getTime())) return res.status(400).json({ error: 'Invalid timestamp' })
-    shipment.checkpoints.push({ id: crypto.randomUUID(), timestamp: ts, location, status_tag, admin_notes: admin_notes || '', updated_by: req.admin?.name || 'Cross Borders Operations' })
+    shipment.checkpoints.push({ id: crypto.randomUUID(), timestamp: ts, location, status_tag, admin_notes: admin_notes || '', updated_by: 'Halilpeli' })
 
     // A journey marker can drive the shipment's public status and progress bar
     const statusChanged = set_status !== undefined && set_status !== '' && set_status !== shipment.current_status
@@ -439,7 +439,7 @@ router.post('/shipments/:id/pod', async (req, res) => {
       location: shipment.destination_city || shipment.recipient_city || 'Delivery address',
       status_tag: 'Delivered',
       admin_notes: `Received by ${shipment.pod.receiver_name}`,
-      updated_by: req.admin?.name || 'Cross Borders Operations',
+      updated_by: 'Halilpeli',
     })
     const updated = await saveShipment(shipment)
     await audit(req.admin, 'shipment.delivered', 'shipment', String(updated._id), `${updated.tracking_number}: POD recorded, received by ${updated.pod.receiver_name}`)

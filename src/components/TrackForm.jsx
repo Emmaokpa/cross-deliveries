@@ -91,10 +91,8 @@ export function TrackingResult({ result }) {
     ['Time', clockTime(cp.timestamp)],
     ['Location', cp.location && cp.location !== '—' ? cp.location : '—'],
     ['Status', <span className="inline-block rounded-full bg-[#fdeaec] px-2 py-0.5 text-xs font-semibold text-primary">{cp.status_tag && cp.status_tag !== '—' ? cp.status_tag : '—'}</span>],
-    ['Updated By', cp.updated_by && cp.updated_by !== '—'
-      ? cp.updated_by
-      : FALLBACK_AUTHOR,
-    ],
+    // Updated By is hardcoded — never the admin's name.
+    ['Updated By', FALLBACK_AUTHOR],
     ['Remarks', cp.admin_notes && cp.admin_notes !== '—' ? cp.admin_notes : '—'],
   ])
 
