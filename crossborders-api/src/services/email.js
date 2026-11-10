@@ -388,36 +388,11 @@ function renderTemplate(shipment) {
                 </tr>
               </table>
             </td>
-          </tr>
-
-          <!-- ═══ Cost breakdown ═══ -->
-          <tr>
-            <td class="cbd-pad" style="padding:24px 34px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${DARK_LINE};border-radius:10px;border-collapse:separate;overflow:hidden;">
-                <tr>
-                  <td colspan="2" style="background:${NAVY};color:${WHITE};font-size:11px;letter-spacing:1.6px;padding:11px 16px;font-weight:bold;text-transform:uppercase;">Cost Breakdown (${cur})</td>
-                </tr>
-                ${rowHtml}
-                <tr>
-                  <td style="padding:13px 16px;background:#202430;color:${WHITE};font-weight:bold;font-size:15px;">TOTAL</td>
-                  <td style="padding:13px 16px;background:#202430;color:${WHITE};font-weight:bold;font-size:15px;text-align:right;">{{total_cost}}</td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="padding:10px 16px;background:${DARK_CARD};">
-                    <span style="display:inline-block;font-size:11px;font-weight:bold;letter-spacing:1px;color:${WHITE};background:${payColor};padding:4px 12px;border-radius:999px;">${payLabel}</span>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:8px 2px 0;color:${DIM};font-size:11.5px;">The official commercial invoice for this consignment is attached to this email as a PDF.</p>
-            </td>
-          </tr>
-
-          <!-- ═══ CTA ═══ -->
+          </tr>          <!-- ═══ CTA ═══ -->
           <tr>
             <td align="center" class="cbd-pad" style="padding:26px 34px 4px;">
               <a href="{{tracking_url}}" style="display:inline-block;background:${CORAL};color:${WHITE};text-decoration:none;font-weight:bold;font-size:15px;padding:14px 40px;border-radius:8px;letter-spacing:0.4px;">Track Your Package</a>
-              <p style="margin:12px 0 0;color:${DIM};font-size:12px;">Or paste this link into your browser:<br />
-                <span style="color:${MUTED};">{{tracking_url}}</span>
+              <p style="margin:12px 0 0;color:${DIM};font-size:12px;">Or paste this link into your browser:<br />                <span style="color:${MUTED};">{{tracking_url}}</span>
               </p>
             </td>
           </tr>
@@ -426,6 +401,7 @@ ${letterheadDetails()}
 ${brandFooter('This is an automated shipment notification. If you were not expecting this consignment, please contact us immediately.')}`
 
   return darkShell(inner)
+
 }
 
 export function fillTemplate(shipment) {

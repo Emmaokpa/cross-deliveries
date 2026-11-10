@@ -266,53 +266,17 @@ function metaGrid(doc, shipment) {
 }
 
 function pricingTable(doc, shipment) {
+  // Payment status banner — kept, description/amount table and total cost removed
   const x0 = M
   const width = PW()
   const cur = (shipment.currency || 'NGN').toUpperCase()
-  doc.moveDown(0.5)
-
-  // Every row is positioned from an explicit `y` cursor: doc.text() advances
-  // doc.y by the text height, which used to drift the table down until it
-  // spilled onto a phantom second page.
-  let y = doc.y
-
-  // Header band
-  doc.rect(x0, y, width, 22).fill(NAVY)
-  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(8.5)
-  doc.text('DESCRIPTION', x0 + 12, y + 7, { characterSpacing: 0.8, lineBreak: false })
-  doc.text(`AMOUNT (${cur})`, x0 + width - 130, y + 7, { width: 118, align: 'right', lineBreak: false })
-  y += 22
-
-  // One simple all-in price — no fuel/customs surcharge rows (matching the
-  // admin dashboard, where those fields were removed).
-  // Shipping fee row removed (matches the admin dashboard & the email template).
-  const rows = [
-    // ['Shipping Fee', shipment.base_freight],
-  ]
-  rows.forEach(([label, amount], i) => {
-    if (i % 2 === 0) doc.rect(x0, y, width, 22).fill('#181C23')
-    doc.rect(x0, y, width, 22).lineWidth(1).strokeColor(DARK_LINE).stroke()
-    doc.fillColor(OFF_WHITE).font('Helvetica').fontSize(9.5)
-    doc.text(label, x0 + 12, y + 7, { lineBreak: false })
-    doc.font('Helvetica-Bold').fillColor(WHITE)
-    doc.text(money(amount, cur), x0 + width - 130, y + 7, { width: 118, align: 'right', lineBreak: false })
-    y += 22
-  })
-
-  // Total row
-  doc.rect(x0, y, width, 26).fill('#202430')
-  doc.rect(x0, y, width, 26).lineWidth(1).strokeColor(DARK_LINE).stroke()
-  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(10.5)
-  doc.text('TOTAL COST', x0 + 12, y + 8, { characterSpacing: 0.8, lineBreak: false })
-  doc.text(money(shipment.total_cost || 0, cur), x0 + width - 130, y + 8, { width: 118, align: 'right', lineBreak: false })
-  y += 26 + 12
 
   // Payment status banner
   const paid = shipment.payment_status === 'Paid'
   const bannerColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : CORAL
   const label = paid ? 'PAID' : shipment.payment_status === 'Pending' ? 'PAYMENT PENDING' : 'UNPAID'
-  doc.rect(x0, y, width, 28).fill(bannerColor)
+  doc.rect(x0, M, width, 28).fill(bannerColor)
   doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(12)
-  doc.text(label, x0, y + 8, { width, align: 'center', lineBreak: false })
-  doc.y = y + 28
+  doc.text(label, x0, M + 8, { width, align: 'center', lineBreak: false })
+  doc.y = M + 28
 }
