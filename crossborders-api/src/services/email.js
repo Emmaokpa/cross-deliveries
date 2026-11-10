@@ -5,7 +5,6 @@ import { audit } from '../routes/auth.js'
 import { TRACKING_URL, LOGO_PATH } from './shipment-utils.js'
 import { COMPANY } from './company.js'
 import { buildInvoicePdf } from './pdf.js'
-import { format as fmtMoney } from './currency.js'
 
 const LOGO_CID = 'cbd-logo'
 
@@ -28,10 +27,6 @@ const WHITE = '#FFFFFF'
 const OFF_WHITE = '#D6DAE3'  // general body text
 const MUTED = '#9AA1AE'      // labels
 const DIM = '#7A8290'        // footnotes / footers
-
-function fmt(n, code) {
-  return fmtMoney(n, code)
-}
 
 function fmtDate(d) {
   if (!d) return null
@@ -236,12 +231,12 @@ function replyCtaBlock(subject) {
 // as the confirmation letter.
 // ─────────────────────────────────────────────────────────────────
 function renderTemplate(shipment) {
-  const cur = shipment.currency || 'NGN'
   const trackUrl = TRACKING_URL(shipment.tracking_number)
   const eta = fmtDate(shipment.estimated_delivery)
-  const paid = shipment.payment_status === 'Paid'
-  const payColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : CORAL
-  const payLabel = paid ? 'PAID' : (shipment.payment_status || 'UNPAID').toUpperCase()
+  const paid = String(shipment.payment_status || '').trim().toLowerCase() === 'paid'
+  const payColor = paid ? '#0E7A3D' : CORAL
+  const payLabel = paid ? 'PAID' : 'UNPAID'
+    const paymentLabel = paid ? 'PAID' : 'UNPAID'
   const isDelivered = shipment.current_status === 'Delivered'
   const deliveredOn = fmtDate(shipment.delivered_at)
   const receivedBy = shipment.pod?.receiver_name
@@ -264,23 +259,6 @@ function renderTemplate(shipment) {
             </td>
           </tr>`
     : ''
-
-  // One simple all-in price — no fuel/customs surcharge rows (matching the
-  // admin dashboard, where those fields were removed).
-  // Shipping fee row removed (matches the admin dashboard & the invoice PDF).
-  const costRows = [
-    // ['Shipping Fee', fmt(shipment.base_freight, cur)],
-  ]
-
-  const rowHtml = costRows
-    .map(
-      ([label, amount]) => `
-                <tr>
-                  <td style="padding:11px 16px;border-bottom:1px solid ${DARK_LINE};color:${OFF_WHITE};font-size:13.5px;">${label}</td>
-                  <td style="padding:11px 16px;border-bottom:1px solid ${DARK_LINE};color:${WHITE};font-size:13.5px;text-align:right;font-weight:600;">${amount}</td>
-                </tr>`,
-    )
-    .join('')
 
   const detailRow = (label, value) =>
     value
@@ -383,16 +361,36 @@ function renderTemplate(shipment) {
                       ${detailRow('Weight', '{{package_weight}} kg')}
                       ${detailRow('Pieces', '{{package_quantity}}')}
                       ${detailRow('Payment', payLabel)}
+                                          ${detailRow('Payment', paymentLabel)}
                     </table>
                   </td>
                 </tr>
               </table>
             </td>
-          </tr>          <!-- ═══ CTA ═══ -->
+          </tr>
+
+          <!-- ═══ Payment status ═══ -->
+          <tr>
+            <td class="cbd-pad" style="padding:22px 34px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${DARK_PANEL};border-radius:10px;border:1px solid ${DARK_LINE};">
+                <tr>
+                  <td style="padding:16px 18px;text-align:center;">
+                    <div style="font-size:10px;color:${MUTED};letter-spacing:1.4px;text-transform:uppercase;margin-bottom:8px;">Payment Status</div>
+                    <span style="display:inline-block;font-size:13px;font-weight:bold;letter-spacing:1.2px;color:${WHITE};background:${payColor};padding:6px 24px;border-radius:999px;">${payLabel}</span>
+                                      <span style="display:inline-block;font-size:13px;font-weight:bold;letter-spacing:1.2px;color:${WHITE};background:${payColor};padding:6px 24px;border-radius:999px;">${paymentLabel}</span>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:8px 2px 0;color:${DIM};font-size:11.5px;">The official commercial invoice for this consignment is attached to this email as a PDF.</p>
+            </td>
+          </tr>
+
+          <!-- ═══ CTA ═══ -->
           <tr>
             <td align="center" class="cbd-pad" style="padding:26px 34px 4px;">
               <a href="{{tracking_url}}" style="display:inline-block;background:${CORAL};color:${WHITE};text-decoration:none;font-weight:bold;font-size:15px;padding:14px 40px;border-radius:8px;letter-spacing:0.4px;">Track Your Package</a>
-              <p style="margin:12px 0 0;color:${DIM};font-size:12px;">Or paste this link into your browser:<br />                <span style="color:${MUTED};">{{tracking_url}}</span>
+              <p style="margin:12px 0 0;color:${DIM};font-size:12px;">Or paste this link into your browser:<br />
+                <span style="color:${MUTED};">{{tracking_url}}</span>
               </p>
             </td>
           </tr>
@@ -419,7 +417,6 @@ export function fillTemplate(shipment) {
     .replaceAll('{{current_status}}', shipment.current_status)
     .replaceAll('{{origin_city}}', escapeHtml(shipment.origin_city || '—'))
     .replaceAll('{{destination_city}}', escapeHtml(shipment.destination_city || '—'))
-    .replaceAll('{{total_cost}}', fmt(shipment.total_cost, shipment.currency || 'NGN'))
     .replaceAll('{{tracking_url}}', TRACKING_URL(shipment.tracking_number))
 }
 

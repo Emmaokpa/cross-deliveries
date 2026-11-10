@@ -22,17 +22,6 @@ const MUTED = '#9AA1AE'
 const DIM = '#7A8290'
 const BODY = '#AEB6C4'
 
-// PDF core fonts (Helvetica) lack most currency glyphs (₦, ₩, ₹…), so amounts
-// always print with the ISO code prefix, e.g. "NGN 12,500.00" / "KRW 1,250,000".
-const money = (n, code = 'NGN') => {
-  const zeroDecimals = code === 'JPY' || code === 'KRW'
-  const num = Number(n || 0)
-  return `${String(code).toUpperCase()} ${num.toLocaleString('en-US', {
-    minimumFractionDigits: zeroDecimals ? 0 : 2,
-    maximumFractionDigits: zeroDecimals ? 0 : 2,
-  })}`
-}
-
 const M = 48 // page margin
 const PW = () => 595.28 - M * 2 // usable width (A4)
 
@@ -52,7 +41,7 @@ export async function buildInvoicePdf(shipment) {
   titleBlock(doc, shipment)
   partyCards(doc, shipment)
   metaGrid(doc, shipment)
-  pricingTable(doc, shipment)
+  paymentStatusBlock(doc, shipment)
 
   // Footer — kept as short single lines and clear of the bottom margin:
   // a long line used to wrap past the margin and make pdfkit append blank
@@ -212,6 +201,7 @@ function metaGrid(doc, shipment) {
   const eta = shipment.estimated_delivery
     ? new Date(shipment.estimated_delivery).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     : '—'
+  const isPaid = String(shipment.payment_status || '').trim().toLowerCase() === 'paid'
   const cells = [
     ['CARGO TYPE', shipment.cargo_type],
     ['ORIGIN', shipment.origin_city || '—'],
@@ -219,7 +209,7 @@ function metaGrid(doc, shipment) {
     ['WEIGHT', `${shipment.package_weight || 0} kg`],
     ['DIMENSIONS', shipment.package_dimensions || '—'],
     ['QUANTITY', String(shipment.package_quantity || 1)],
-    ['PAYMENT', shipment.payment_status],
+    ['PAYMENT', isPaid ? 'Paid' : 'Unpaid'],
     ['STATUS', shipment.current_status],
   ]
 
@@ -257,26 +247,21 @@ function metaGrid(doc, shipment) {
   doc.text('ESTIMATED DELIVERY', M + 8, stripY + 5, { characterSpacing: 0.8, lineBreak: false })
   doc.font('Helvetica-Bold').fontSize(10).fillColor(WHITE)
   doc.text(eta, M + 8, stripY + 15, { lineBreak: false })
-  doc.font('Helvetica').fontSize(6.5).fillColor(MUTED)
-  doc.text('CURRENCY', M + 220, stripY + 5, { characterSpacing: 0.8, lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(WHITE)
-  doc.text((shipment.currency || 'NGN').toUpperCase(), M + 220, stripY + 15, { lineBreak: false })
 
-  doc.y = stripY + 26 + 16
+  doc.y = stripY + 26 + 18
 }
 
-function pricingTable(doc, shipment) {
-  // Payment status banner — kept, description/amount table and total cost removed
+function paymentStatusBlock(doc, shipment) {
   const x0 = M
   const width = PW()
-  const cur = (shipment.currency || 'NGN').toUpperCase()
+  const y = doc.y
 
-  // Payment status banner
-  const paid = shipment.payment_status === 'Paid'
-  const bannerColor = paid ? '#0E7A3D' : shipment.payment_status === 'Pending' ? '#B7791F' : CORAL
-  const label = paid ? 'PAID' : shipment.payment_status === 'Pending' ? 'PAYMENT PENDING' : 'UNPAID'
-  doc.rect(x0, M, width, 28).fill(bannerColor)
-  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(12)
-  doc.text(label, x0, M + 8, { width, align: 'center', lineBreak: false })
-  doc.y = M + 28
+  // Payment status banner — only Paid or Unpaid
+  const paid = String(shipment.payment_status || '').trim().toLowerCase() === 'paid'
+  const bannerColor = paid ? '#0E7A3D' : CORAL
+  const label = paid ? 'PAID' : 'UNPAID'
+  doc.roundedRect(x0, y, width, 32, 4).fill(bannerColor)
+  doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(13)
+  doc.text(label, x0, y + 9, { width, align: 'center', characterSpacing: 1.5, lineBreak: false })
+  doc.y = y + 32 + 16
 }
